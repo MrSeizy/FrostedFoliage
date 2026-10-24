@@ -1,0 +1,23 @@
+# Gradle caches and generated build output
+.gradle/
+build/
+out/
+
+# Disposable Minecraft instances
+/run/
+
+# JVM crash reports and heap dumps
+hs_err_pid*.log
+replay_pid*.log
+*.hprof
+
+# Python tooling caches
+__pycache__/
+*.py[cod]
+
+# Local environment values; example files can be committed
+.env
+.env.*
+!.env.example
+!.env.sample
+!.env.template

@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "id": "frostedfoliage",
+  "version": "${version}",
+  "name": "Frosted Foliage",
+  "icon": "assets/frostedfoliage/icon.png",
+  "description": "Gradual, weather-aware snow on foliage. Entirely client-side.",
+  "authors": ["Frosted Foliage contributors"],
+  "license": "LGPL-3.0-or-later",
+  "environment": "client",
+  "entrypoints": {
+    "client": ["dev.frostedfoliage.client.FrostedFoliageClient"],
+    "modmenu": ["dev.frostedfoliage.client.compat.ModMenuIntegration"]
+  },
+  "mixins": ["frostedfoliage.mixins.json"],
+  "depends": {
+    "fabricloader": ">=0.19.5",
+    "minecraft": "~26.3",
+    "java": ">=25",
+    "fabric-api": ">=0.164.0+26.3"
+  }
+}

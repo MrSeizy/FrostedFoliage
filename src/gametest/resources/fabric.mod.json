@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "id": "frostedfoliage-test",
+  "version": "1.0.0",
+  "license": "LGPL-3.0-or-later",
+  "environment": "client",
+  "mixins": ["frostedfoliage-test.mixins.json"],
+  "entrypoints": {"fabric-client-gametest": ["dev.frostedfoliage.test.FrostedFoliageGameTest"]}
+}

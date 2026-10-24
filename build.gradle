@@ -1,0 +1,119 @@
+plugins {
+    id 'net.fabricmc.fabric-loom' version "${loom_version}"
+}
+
+base { archivesName = 'frostedfoliage' }
+
+repositories {
+    mavenCentral()
+    exclusiveContent {
+        forRepository { maven { url = 'https://api.modrinth.com/maven' } }
+        filter { includeGroup 'maven.modrinth' }
+    }
+}
+
+loom {
+    splitEnvironmentSourceSets()
+    mods {
+        frostedfoliage {
+            sourceSet sourceSets.main
+            sourceSet sourceSets.client
+        }
+    }
+}
+
+dependencies {
+    minecraft "com.mojang:minecraft:${minecraft_version}"
+    implementation "net.fabricmc:fabric-loader:${loader_version}"
+    implementation "net.fabricmc.fabric-api:fabric-api:${fabric_api_version}"
+    clientCompileOnly 'maven.modrinth:cloth-config:26.3.159+fabric'
+    clientCompileOnly 'maven.modrinth:modmenu:21.0.0'
+    testImplementation platform('org.junit:junit-bom:5.13.4')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+fabricApi {
+    configureTests {
+        createSourceSet = true
+        modId = 'frostedfoliage-test'
+        enableGameTests = false
+        enableClientGameTests = true
+        eula = false
+    }
+}
+
+dependencies { gametestCompileOnly 'maven.modrinth:iris:1.11.7+26.3-fabric' }
+
+def testRenderer = providers.gradleProperty('testRenderer').getOrElse('vanilla')
+if (!(testRenderer in ['vanilla', 'sodium', 'iris'])) {
+    throw new GradleException('testRenderer must be vanilla, sodium, or iris')
+}
+if (project.hasProperty('shaderPack') && testRenderer != 'iris') {
+    throw new GradleException('shaderPack requires -PtestRenderer=iris')
+}
+if (testRenderer in ['sodium', 'iris']) {
+    dependencies { gametestRuntimeOnly 'maven.modrinth:sodium:mc26.3-0.9.2-fabric' }
+}
+if (testRenderer == 'iris') {
+    dependencies { gametestRuntimeOnly 'maven.modrinth:iris:1.11.7+26.3-fabric' }
+}
+loom.runs.named('clientGameTest') {
+    systemProperties.put('frostedfoliage.test.renderer', testRenderer)
+    systemProperties.put('frostedfoliage.test.benchmark', providers.gradleProperty('benchmark').getOrElse('false'))
+    systemProperties.put('frostedfoliage.test.churn', providers.gradleProperty('churnTest').getOrElse('false'))
+    systemProperties.put('frostedfoliage.test.churn.verify', providers.gradleProperty('verifyChurnFix').getOrElse('false'))
+    systemProperties.put('frostedfoliage.test.churn.label', providers.gradleProperty('churnLabel').getOrElse('current'))
+    systemProperties.put('frostedfoliage.test.textureBudget', providers.gradleProperty('textureBudgetTest').getOrElse('false'))
+    systemProperties.put('frostedfoliage.test.reload', providers.gradleProperty('reloadTest').getOrElse('false'))
+    systemProperties.put('frostedfoliage.test.ground', providers.gradleProperty('groundTest').getOrElse('false'))
+    systemProperties.put('frostedfoliage.test.gallery', providers.gradleProperty('galleryCapture').getOrElse('false'))
+    systemProperties.put('frostedfoliage.test.capture', providers.gradleProperty('captureTest').getOrElse('false'))
+    systemProperties.put('frostedfoliage.test.capture.legacy', providers.gradleProperty('legacyCapture').getOrElse('false'))
+    systemProperties.put('frostedfoliage.test.priority', providers.gradleProperty('priorityTest').getOrElse('false'))
+    systemProperties.put('frostedfoliage.test.appearance', providers.gradleProperty('appearanceTest').getOrElse('false'))
+    systemProperties.put('frostedfoliage.test.depth', providers.gradleProperty('depthTest').getOrElse('false'))
+    systemProperties.put('frostedfoliage.test.video', providers.gradleProperty('videoCapture').getOrElse('false'))
+    systemProperties.put('frostedfoliage.test.timelapse', providers.gradleProperty('timelapseCapture').getOrElse('false'))
+    systemProperties.put('frostedfoliage.test.plants', providers.gradleProperty('plantTest').getOrElse('false'))
+    systemProperties.put('frostedfoliage.test.icon', providers.gradleProperty('iconCapture').getOrElse('false'))
+    systemProperties.put('frostedfoliage.test.vanillaPlants', providers.gradleProperty('vanillaPlants').getOrElse('false'))
+    systemProperties.put('frostedfoliage.test.treeTypes', providers.gradleProperty('treeTypesTest').getOrElse('false'))
+    systemProperties.put('frostedfoliage.test.shaderExpected', project.hasProperty('shaderPack').toString())
+}
+tasks.named('runClientGameTest') {
+    doFirst {
+        if (project.hasProperty('shaderPack')) {
+            def shader = file(project.property('shaderPack'))
+            if (!shader.isFile()) throw new GradleException("Shader pack not found: ${shader}")
+            def directory = file('build/run/clientGameTest')
+            copy { from shader; into new File(directory, 'shaderpacks') }
+            def config = new File(directory, 'config/iris.properties')
+            config.parentFile.mkdirs()
+            config.text = "enableShaders=true\nshaderPack=${shader.name}\n"
+        }
+    }
+}
+
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(25)
+    withSourcesJar()
+}
+tasks.withType(JavaCompile).configureEach { options.release = 25 }
+test { useJUnitPlatform() }
+processResources {
+    inputs.property 'version', project.version
+    filesMatching('fabric.mod.json') { expand version: project.version }
+}
+tasks.withType(Jar).configureEach {
+    from('LICENSE', 'COPYING', 'COPYING.LESSER')
+}
+
+// A separate, opt-in test mod for checking the release jar in a real launcher.
+// Never distribute this jar to players: it creates and controls disposable test worlds.
+tasks.register('clientTestJar', Jar) {
+    dependsOn tasks.named('gametestClasses')
+    archiveClassifier = 'client-tests'
+    destinationDirectory = layout.buildDirectory.dir('testmods')
+    from sourceSets.gametest.output
+}

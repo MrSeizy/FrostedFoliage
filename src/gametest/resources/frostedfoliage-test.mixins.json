@@ -1,0 +1,7 @@
+{
+  "required": true,
+  "package": "dev.frostedfoliage.test.mixin",
+  "compatibilityLevel": "JAVA_25",
+  "client": ["FrameMetricsMixin"],
+  "injectors": {"defaultRequire": 1}
+}
