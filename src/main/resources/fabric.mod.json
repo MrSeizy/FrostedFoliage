@@ -6,6 +6,11 @@
   "icon": "assets/frostedfoliage/icon.png",
   "description": "Gradual, weather-aware snow on foliage. Entirely client-side.",
   "authors": ["Frosted Foliage contributors"],
+  "contact": {
+    "homepage": "https://github.com/MrSeizy/FrostedFoliage",
+    "sources": "https://github.com/MrSeizy/FrostedFoliage",
+    "issues": "https://github.com/MrSeizy/FrostedFoliage/issues"
+  },
   "license": "LGPL-3.0-or-later",
   "environment": "client",
   "entrypoints": {
