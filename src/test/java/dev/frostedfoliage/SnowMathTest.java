@@ -43,6 +43,12 @@ class SnowMathTest {
         // Taiga, old growth pine taiga and windswept hills only snow at altitude.
         for (float temperature : new float[]{0.15f, 0.25f, 0.3f, 0.2f}) assertFalse(SnowMath.freezing(temperature), "temperature " + temperature);
     }
+    @Test void frostedFreezingBiomesNeverMeltButMildOnesDo() {
+        var c = SnowConfig.defaults().toBuilder().freezingBiomesStayFrosted(true).build();
+        assertEquals(1, SnowMath.advance(0, 0, 0.05, 100000, true, c));
+        assertEquals(0, SnowMath.advance(1, 0, 1000, 100000, false, c));
+        assertEquals(0, SnowMath.advance(1, 1, 1, 0, true, c.toBuilder().enabled(false).build()));
+    }
     @Test void disablingImmediatelyRemovesSnow() throws Exception {
         assertEquals(0, SnowMath.advance(1, 1, 1, 0, true, config("{\"enabled\":false}")));
     }

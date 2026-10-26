@@ -11,7 +11,8 @@ public record SnowConfig(boolean enabled, boolean gradualAccumulation, boolean g
         double accumulationSeconds, double meltingSeconds,
         double persistenceSeconds, double skyExposureSensitivity, Quality quality,
         double maxVisualUpdatesPerSecond, int maxCachedSections, List<String> includeBlocks,
-        List<String> excludeBlocks, List<String> extraTextures, boolean treeGroundSnow, boolean plantGroundSnow) {
+        List<String> excludeBlocks, List<String> extraTextures, boolean treeGroundSnow, boolean plantGroundSnow,
+        boolean freezingBiomesStayFrosted) {
     public enum Quality { LOW, MEDIUM, HIGH }
     public static final double MIN_SECONDS = 1, MAX_SECONDS = 86400;
     public static final double MIN_UPDATES_PER_SECOND = 0.05, MAX_UPDATES_PER_SECOND = 2;
@@ -87,7 +88,7 @@ public record SnowConfig(boolean enabled, boolean gradualAccumulation, boolean g
         private double maxVisualUpdatesPerSecond = 0.5;
         private int maxCachedSections = 4096;
         private List<String> includeBlocks = List.of(), excludeBlocks = List.of(), extraTextures = List.of();
-        private boolean treeGroundSnow = true, plantGroundSnow = true;
+        private boolean treeGroundSnow = true, plantGroundSnow = true, freezingBiomesStayFrosted = false;
 
         private Builder() { }
         private Builder(SnowConfig c) {
@@ -100,6 +101,7 @@ public record SnowConfig(boolean enabled, boolean gradualAccumulation, boolean g
             quality = c.quality; maxVisualUpdatesPerSecond = c.maxVisualUpdatesPerSecond;
             maxCachedSections = c.maxCachedSections; includeBlocks = c.includeBlocks; excludeBlocks = c.excludeBlocks;
             extraTextures = c.extraTextures; treeGroundSnow = c.treeGroundSnow; plantGroundSnow = c.plantGroundSnow;
+            freezingBiomesStayFrosted = c.freezingBiomesStayFrosted;
         }
 
         public Builder enabled(boolean value) { enabled = value; return this; }
@@ -126,13 +128,14 @@ public record SnowConfig(boolean enabled, boolean gradualAccumulation, boolean g
         public Builder extraTextures(List<String> value) { extraTextures = value; return this; }
         public Builder treeGroundSnow(boolean value) { treeGroundSnow = value; return this; }
         public Builder plantGroundSnow(boolean value) { plantGroundSnow = value; return this; }
+        public Builder freezingBiomesStayFrosted(boolean value) { freezingBiomesStayFrosted = value; return this; }
 
         public SnowConfig build() {
             return new SnowConfig(enabled, gradualAccumulation, gradualMelting, moddedFoliage, maximumCoverage,
                     whiteness, variation, preferTopFaces, snowDepth, plantsEnabled, plantSnowDepth, plantMaximumCoverage,
                     accumulationSeconds, meltingSeconds, persistenceSeconds, skyExposureSensitivity, quality,
                     maxVisualUpdatesPerSecond, maxCachedSections, includeBlocks, excludeBlocks, extraTextures,
-                    treeGroundSnow, plantGroundSnow);
+                    treeGroundSnow, plantGroundSnow, freezingBiomesStayFrosted);
         }
     }
 }

@@ -51,6 +51,7 @@ public final class SnowMath {
     public static double advance(double snow, double rain, double elapsed, double drySeconds,
                                  boolean freezing, SnowConfig config) {
         if (!config.enabled()) return 0;
+        if (freezing && config.freezingBiomesStayFrosted()) return 1;
         if (rain > 0.01) {
             if (!config.gradualAccumulation()) return 1;
             return Math.min(1, snow + elapsed * rain / config.accumulationSeconds());

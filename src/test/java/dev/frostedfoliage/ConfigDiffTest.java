@@ -12,7 +12,8 @@ import static org.junit.jupiter.api.Assertions.*;
 class ConfigDiffTest {
     /** Read every tick or per capture, so changing them needs no cache invalidation. */
     private static final Set<String> SIMULATION_ONLY = Set.of("gradualAccumulation", "gradualMelting",
-            "accumulationSeconds", "meltingSeconds", "persistenceSeconds", "quality", "maxVisualUpdatesPerSecond");
+            "accumulationSeconds", "meltingSeconds", "persistenceSeconds", "quality", "maxVisualUpdatesPerSecond",
+            "freezingBiomesStayFrosted");
 
     @Test void everySettingIsEitherInvalidatedOrDeclaredSimulationOnly() throws Exception {
         var defaults = SnowConfig.defaults();
