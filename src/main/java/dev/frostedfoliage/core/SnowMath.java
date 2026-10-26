@@ -73,13 +73,33 @@ public final class SnowMath {
         int alpha = argb >>> 24;
         if (alpha == 0) return 0;
         int px = x * 16 / width, py = y * 16 / height;
-        int luminance = (((argb >> 16) & 255) * 3 + ((argb >> 8) & 255) * 6 + (argb & 255)) / 10;
         double patch = 0.78 * smoothNoise(x * 4.0 / width, y * 4.0 / height, variant + 37)
-                + 0.12 * noise(px / 2, py / 2, variant + 17) + 0.10 * (1 - luminance / 255.0);
+                + 0.12 * noise(px / 2, py / 2, variant + 17) + 0.10 * (1 - luminance(argb) / 255.0);
         if (patch >= stage / 16.0) return 0;
+        return frostPixel(argb);
+    }
+
+    /** Fully snowed pixel, also used whole for falling leaf particles. */
+    public static int frostPixel(int argb) {
+        int alpha = argb >>> 24;
+        if (alpha == 0) return 0;
         // Retain the source's branch/needle shading without adding independent per-pixel glitter.
-        int shade = 160 + luminance * 88 / 255;
+        int shade = 160 + luminance(argb) * 88 / 255;
         return (alpha << 24) | (shade << 16) | ((shade + 2) << 8) | (shade + 4);
+    }
+
+    private static int luminance(int argb) {
+        return (((argb >> 16) & 255) * 3 + ((argb >> 8) & 255) * 6 + (argb & 255)) / 10;
+    }
+
+    /** Leaves fall from anywhere on the block, but carry snow only from the share of it that depth whitens. */
+    public static double frostedLeafChance(double coverage, double depth) {
+        return coverage * depth;
+    }
+
+    /** Untinted vertex shade drawn over snow sprites. */
+    public static int snowTint(double whiteness) {
+        return (int) (180 + 75 * whiteness);
     }
 
     /** Dither the last quarter-block of side snow; never whiten pixels below the chosen depth. */
