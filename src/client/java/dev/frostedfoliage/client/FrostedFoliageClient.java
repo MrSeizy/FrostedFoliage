@@ -45,8 +45,7 @@ public final class FrostedFoliageClient implements ClientModInitializer {
     @Override
     public void onInitializeClient() {
         var configDir = FabricLoader.getInstance().getConfigDir();
-        // snowytrees.json and /snowytrees predate the rename; both only redirect to the current names.
-        store = new ConfigStore(configDir.resolve(MOD_ID + ".json"), configDir.resolve("snowytrees.json"));
+        store = new ConfigStore(configDir.resolve(MOD_ID + ".json"));
         SnowConfig config = SnowConfig.defaults();
         try { config = store.load(); } catch (IOException e) { LOGGER.error("Using defaults; original config retained", e); }
         system = new SnowSystem(config);
@@ -63,7 +62,7 @@ public final class FrostedFoliageClient implements ClientModInitializer {
             });
         });
         ClientCommandRegistrationCallback.EVENT.register((dispatcher, access) -> {
-            var command = dispatcher.register(literal(MOD_ID)
+            dispatcher.register(literal(MOD_ID)
                 .then(literal("status").executes(ctx -> {
                     String status = system.diagnostics();
                     ctx.getSource().sendFeedback(Component.literal(status)); LOGGER.info(status); return 1;
@@ -78,7 +77,6 @@ public final class FrostedFoliageClient implements ClientModInitializer {
                     try { applyConfig(store.load()); ctx.getSource().sendFeedback(Component.translatable("frostedfoliage.command.reload")); return 1; }
                     catch (IOException e) { ctx.getSource().sendError(Component.literal(e.getMessage())); return 0; }
                 })));
-            dispatcher.register(literal("snowytrees").redirect(command));
         });
         String version = FabricLoader.getInstance().getModContainer(MOD_ID)
                 .map(mod -> mod.getMetadata().getVersion().getFriendlyString()).orElse("unknown");
