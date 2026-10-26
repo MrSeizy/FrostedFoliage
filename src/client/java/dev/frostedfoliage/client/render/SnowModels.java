@@ -4,6 +4,7 @@ import dev.frostedfoliage.client.FrostedFoliageClient;
 import dev.frostedfoliage.client.world.SnowSystem;
 import dev.frostedfoliage.client.world.PlantTypes;
 import dev.frostedfoliage.config.SnowConfig;
+import dev.frostedfoliage.core.GroundSnowMath;
 import dev.frostedfoliage.core.HeightClipper;
 import dev.frostedfoliage.core.SnowMath;
 import java.util.HashMap;
@@ -30,7 +31,9 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.resources.Identifier;
 import net.minecraft.util.RandomSource;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import static dev.frostedfoliage.client.render.SnowSpriteSource.LEAF_STRIDE;
 import static dev.frostedfoliage.client.render.SnowSpriteSource.PLANT_STRIDE;
 import static dev.frostedfoliage.client.render.SnowSpriteSource.STAGES;
@@ -116,7 +119,7 @@ public final class SnowModels {
 
         @Override public void emitQuads(QuadEmitter emitter, BlockAndTintGetter level, BlockPos pos, BlockState state,
                                         RandomSource random, Predicate<Direction> cullTest) {
-            if (level != BlockAndTintGetter.EMPTY) emitGround(emitter, system.ground().layers(pos));
+            if (level != BlockAndTintGetter.EMPTY) emitGround(emitter, level, pos);
             // Every block of every rebuilt chunk passes through here, so test eligibility before anything else.
             boolean foliage = level != BlockAndTintGetter.EMPTY && system.foliage().test(state);
             boolean plant = foliage && system.foliage().isPlant(state);
@@ -139,16 +142,30 @@ public final class SnowModels {
             finally { worker.output = null; worker.bank = null; worker.config = null; }
         }
 
-        private void emitGround(QuadEmitter emitter, int layers) {
+        private void emitGround(QuadEmitter emitter, BlockAndTintGetter level, BlockPos pos) {
+            int layers = system.ground().layers(pos);
             if (layers == 0) return;
             float height = layers / 8f;
             for (Direction face : Direction.values()) {
-                if (face == Direction.DOWN) continue;
+                if (face == Direction.DOWN || (face != Direction.UP && sideHidden(level, pos, face, layers))) continue;
                 if (face == Direction.UP) emitter.square(face, 0, 0, 1, 1, 1 - height);
                 else emitter.square(face, 0, 0, 1, height, 0);
                 emitter.cullFace(null).tintIndex(-1).color(-1, -1, -1, -1).chunkLayer(ChunkSectionLayer.SOLID);
                 emitter.materialBake(bank.groundSnow, MutableQuadView.BAKE_LOCK_UV).translate(0, 1, 0).emit();
             }
+        }
+
+        /**
+         * Virtual snow in another chunk can change without rebuilding this mesh, so only this chunk's counts. Blocks
+         * beside the snow are safe in any chunk: changing one rebuilds the neighboring meshes too.
+         */
+        private boolean sideHidden(BlockAndTintGetter level, BlockPos ground, Direction side, int layers) {
+            BlockState beside = level.getBlockState(ground.above().relative(side));
+            BlockPos neighbor = ground.relative(side);
+            boolean sameChunk = neighbor.getX() >> 4 == ground.getX() >> 4 && neighbor.getZ() >> 4 == ground.getZ() >> 4;
+            return GroundSnowMath.sideHidden(layers, beside.isSolidRender(),
+                    beside.is(Blocks.SNOW) ? beside.getValue(BlockStateProperties.LAYERS) : 0,
+                    sameChunk ? system.ground().layers(neighbor) : 0);
         }
     }
 

@@ -3,12 +3,15 @@ package dev.frostedfoliage.test;
 import dev.frostedfoliage.client.FrostedFoliageClient;
 import dev.frostedfoliage.client.world.GroundDiscoveryTest;
 import dev.frostedfoliage.config.SnowConfig;
+import java.util.EnumSet;
 import java.util.List;
+import java.util.Set;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.fabric.api.client.gametest.v1.screenshot.TestScreenshotOptions;
 import net.fabricmc.fabric.api.client.renderer.v1.Renderer;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.DoublePlantBlock;
@@ -19,6 +22,9 @@ public final class GroundSnowTest {
     private static final BlockPos FLOWER = new BlockPos(0, 63, 0), TALL = new BlockPos(3, 63, 0),
             SHRUB = new BlockPos(6, 63, 0), TREE = new BlockPos(12, 63, 0), EDGE = new BlockPos(15, 63, 8),
             ROOF = new BlockPos(-4, 63, 0), WET = new BlockPos(-7, 63, 0), ISOLATED = new BlockPos(40, 63, 0);
+    // Under the canopy; the chunk border runs between z=0 and z=-1.
+    private static final BlockPos CANOPY = new BlockPos(9, 63, 1), BORDER_SOUTH = new BlockPos(9, 63, 0),
+            BORDER_NORTH = new BlockPos(9, 63, -1);
     private static final List<BlockPos> PLANTS = List.of(FLOWER, TALL, SHRUB, EDGE);
 
     public void run(ClientGameTestContext context) {
@@ -69,13 +75,20 @@ public final class GroundSnowTest {
                             c.level.getBlockState(p), c.level.getBlockState(p.above()), FrostedFoliageClient.system().ground().diagnostics());
                 }
             });
-            context.waitFor(c -> PLANTS.stream().allMatch(p -> layers(p) == 1) && layers(TREE) == 1, 1200);
+            context.waitFor(c -> PLANTS.stream().allMatch(p -> layers(p) == 1) && layers(TREE) == 1 && layers(BORDER_NORTH) == 1, 1200);
             context.waitTicks(20);
             context.runOnClient(c -> {
                 check(!FrostedFoliageClient.system().active(), "Ground cover should work without weather history");
                 check(layers(ROOF) == 0 && layers(WET) == 0, "Sheltered or waterlogged plant received ground snow");
                 for (BlockPos p : PLANTS) mesh(c, p, 1);
                 mesh(c, TREE, 1);
+                // Equal virtual snow in the same chunk and solid blocks hide sides. Across a chunk border the side stays,
+                // because the other chunk's virtual snow can change without rebuilding this mesh.
+                sides(c, CANOPY, 1, Set.of());
+                sides(c, BORDER_SOUTH, 1, Set.of(Direction.NORTH));
+                sides(c, BORDER_NORTH, 1, Set.of(Direction.SOUTH));
+                check(c.level.getBlockState(TREE.above().west()).isSolidRender(), "Precondition: log west of TREE");
+                sides(c, TREE, 1, Set.of(Direction.NORTH));
                 check(c.level.getBlockState(TREE.above()).isAir(), "Virtual snow changed an air block");
                 check(c.level.getBlockState(FLOWER.above()).is(Blocks.POPPY), "Virtual snow replaced a flower");
                 if (Boolean.getBoolean("frostedfoliage.test.shaderExpected"))
@@ -123,7 +136,15 @@ public final class GroundSnowTest {
             context.waitFor(c -> layers(ISOLATED) == 0, 400);
             server.runCommand("setblock 40 64 0 minecraft:air");
             context.waitFor(c -> layers(ISOLATED) == 1, 400);
-            context.runOnClient(c -> mesh(c, ISOLATED, 1));
+            context.runOnClient(c -> {
+                // Real snow of equal height to the east hides that side; nothing stands beside the other three.
+                check(c.level.getBlockState(ISOLATED.above().east()).is(Blocks.SNOW), "Precondition: real snow east of ISOLATED");
+                for (Direction side : List.of(Direction.WEST, Direction.NORTH, Direction.SOUTH)) {
+                    check(c.level.getBlockState(ISOLATED.above().relative(side)).isAir() && layers(ISOLATED.relative(side)) == 0,
+                            "Precondition: nothing " + side + " of ISOLATED");
+                }
+                sides(c, ISOLATED, 1, Set.of(Direction.WEST, Direction.NORTH, Direction.SOUTH));
+            });
 
             for (String block : List.of("ice", "packed_ice", "barrier")) {
                 server.runCommand("setblock 12 63 0 minecraft:" + block);
@@ -158,7 +179,26 @@ public final class GroundSnowTest {
             context.waitTicks(100);
             String after = context.computeOnClient(c -> FrostedFoliageClient.system().ground().diagnostics());
             check(before.equals(after), "Quiet terrain kept scanning or requesting rebuilds: " + before + " -> " + after);
-            FrostedFoliageClient.LOGGER.info("GROUND SNOW PASS plants, trees, roofs, water, 1/4/8 layers, toggles, occupancy edits, ice exclusion, discovery during streaming, snow removal, chunk boundary, reload, idle: {}", after);
+
+            // Unequal neighbors in one chunk: a full-height column beside a one-layer one keeps its exposed side.
+            BlockPos step = EDGE.west();
+            server.runCommand("setblock 14 64 8 minecraft:fern");
+            server.runCommand("setblock 13 64 8 minecraft:snow");
+            server.runCommand("setblock 16 64 8 minecraft:snow[layers=8]");
+            context.waitFor(c -> layers(EDGE) == 8 && layers(step) == 1, 400);
+            context.runOnClient(c -> {
+                for (BlockPos p : List.of(EDGE, step)) {
+                    check(c.level.getBlockState(p.above().north()).isAir() && c.level.getBlockState(p.above().south()).isAir(),
+                            "Precondition: nothing north or south of " + p);
+                }
+                sides(c, EDGE, 8, Set.of(Direction.WEST, Direction.NORTH, Direction.SOUTH));
+                sides(c, step, 1, Set.of(Direction.NORTH, Direction.SOUTH));
+            });
+            server.runCommand("tp @a 12.3 63.6 5.3 -45 9");
+            world.getConnection().waitForChunksRender(false, 1200);
+            context.waitTicks(20);
+            context.takeScreenshot(TestScreenshotOptions.of("ground-02-unequal-sides").withSize(1440, 900));
+            FrostedFoliageClient.LOGGER.info("GROUND SNOW PASS plants, trees, roofs, water, 1/4/8 layers, toggles, occupancy edits, ice exclusion, discovery during streaming, snow removal, chunk boundary, reload, idle, side culling: {}", after);
         }
         check(context.computeOnClient(c -> FrostedFoliageClient.system().ground().diagnostics().contains("groundChunks=0")), "Disconnect retained ground cache");
     }
@@ -170,25 +210,36 @@ public final class GroundSnowTest {
         });
         context.waitTicks(20);
     }
-    private static void mesh(Minecraft client, BlockPos pos, int expected) {
+    /** Checks the virtual snow's top face and returns the sides it draws, identified by their geometry. */
+    private static Set<Direction> mesh(Minecraft client, BlockPos pos, int expected) {
         var state = client.level.getBlockState(pos);
         var model = client.getModelManager().getBlockStateModelSet().get(state);
         var atlas = (net.minecraft.client.renderer.texture.TextureAtlas) client.getTextureManager()
                 .getTexture(net.minecraft.client.renderer.texture.TextureAtlas.LOCATION_BLOCKS);
         var finder = atlas.spriteFinder();
-        int[] count = {0}; float[] min = {Float.POSITIVE_INFINITY}, max = {Float.NEGATIVE_INFINITY};
+        int[] tops = {0}; float[] top = {Float.NaN}, sideMin = {Float.POSITIVE_INFINITY}, sideMax = {Float.NEGATIVE_INFINITY};
+        Set<Direction> sides = EnumSet.noneOf(Direction.class);
         var emitter = Renderer.get().quadEmitter(q -> {
             if (!finder.find(q).contents().name().toString().equals("minecraft:block/snow")) return;
-            count[0]++;
             check(q.tintIndex() == -1 && q.cullFace() == null, "Ground snow inherited tint or culling");
-            for (int i = 0; i < 4; i++) { min[0] = Math.min(min[0], q.y(i)); max[0] = Math.max(max[0], q.y(i)); }
+            if (q.lightFace() == Direction.UP) { tops[0]++; top[0] = q.y(0); return; }
+            check(sides.add(q.lightFace()), "Ground snow drew its " + q.lightFace() + " side twice at " + pos);
+            for (int i = 0; i < 4; i++) { sideMin[0] = Math.min(sideMin[0], q.y(i)); sideMax[0] = Math.max(sideMax[0], q.y(i)); }
         });
         model.emitQuads(emitter, client.level, pos, state, RandomSource.create(1), d -> false);
-        check(count[0] == (expected == 0 ? 0 : 5), "Ground mesh count " + count[0] + " at " + pos + " expected layers=" + expected);
+        check(tops[0] == (expected == 0 ? 0 : 1) && (expected > 0 || sides.isEmpty()),
+                "Ground mesh at " + pos + " had " + tops[0] + " tops and sides " + sides + ", expected layers=" + expected);
         if (expected > 0) {
-            check(Math.abs(min[0] - 1) < 1e-5 && Math.abs(max[0] - (1 + expected / 8f)) < 1e-5, "Incorrect ground mesh height");
+            check(Math.abs(top[0] - (1 + expected / 8f)) < 1e-5, "Incorrect ground mesh height");
+            check(sides.isEmpty() || Math.abs(sideMin[0] - 1) < 1e-5 && Math.abs(sideMax[0] - (1 + expected / 8f)) < 1e-5,
+                    "Incorrect ground side height");
             check(model.createGeometryKey(client.level, pos, state, RandomSource.create(1)) == null, "Ground mesh used location-independent cache");
         }
+        return sides;
+    }
+    private static void sides(Minecraft client, BlockPos pos, int layers, Set<Direction> expected) {
+        Set<Direction> drawn = mesh(client, pos, layers);
+        check(drawn.equals(expected), "Ground snow at " + pos + " drew sides " + drawn + ", expected " + expected);
     }
     private static void check(boolean condition, String message) { if (!condition) throw new AssertionError(message); }
 }
