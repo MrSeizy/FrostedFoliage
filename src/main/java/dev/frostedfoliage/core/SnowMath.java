@@ -98,6 +98,27 @@ public final class SnowMath {
         return Math.abs(dv) >= Math.abs(du) ? (dy * dv < 0 ? 1 : 2) : (dy * du < 0 ? 3 : 4);
     }
 
+    /**
+     * Picks the texture edge that points down along the quad's steepest side, or 0 when the UVs are not a
+     * plain projection of block height. Inputs are the four vertices' block-relative y and sprite-relative u/v.
+     */
+    public static int quadDepthEdge(float[] y, float[] u, float[] v) {
+        int edge = 0;
+        float largestDy = 0, smallestUv = Float.POSITIVE_INFINITY;
+        for (int i = 1; i < 4; i++) {
+            float dy = y[i] - y[0], du = u[i] - u[0], dv = v[i] - v[0];
+            float uvDistance = du * du + dv * dv;
+            if (Math.abs(dy) > largestDy || (Math.abs(dy) == largestDy && uvDistance < smallestUv)) {
+                largestDy = Math.abs(dy);
+                smallestUv = uvDistance;
+                edge = depthEdge(dy, du, dv);
+            }
+        }
+        // Unusual shifted/cropped UVs retain geometrically clipped snow instead of a misplaced fade.
+        for (int i = 0; i < 4 && edge != 0; i++) if (!depthMappingMatches(edge, y[i], u[i], v[i])) edge = 0;
+        return edge;
+    }
+
     /** A shifted/cropped custom UV projection cannot use a full-block taper without losing valid snow. */
     public static boolean depthMappingMatches(int edge, double y, double u, double v) {
         return Math.abs(y - textureHeight(u, v, edge)) <= 1e-4;

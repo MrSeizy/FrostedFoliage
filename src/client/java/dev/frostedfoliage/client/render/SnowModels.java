@@ -1,5 +1,6 @@
 package dev.frostedfoliage.client.render;
 
+import dev.frostedfoliage.client.FrostedFoliageClient;
 import dev.frostedfoliage.client.world.SnowSystem;
 import dev.frostedfoliage.client.world.PlantTypes;
 import dev.frostedfoliage.config.SnowConfig;
@@ -7,6 +8,8 @@ import dev.frostedfoliage.core.HeightClipper;
 import dev.frostedfoliage.core.SnowMath;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Predicate;
 import net.fabricmc.fabric.api.client.model.loading.v1.ModelLoadingPlugin;
 import net.fabricmc.fabric.api.client.model.loading.v1.ModelModifier;
@@ -51,7 +54,7 @@ public final class SnowModels {
         final Map<Identifier, TextureAtlasSprite[]> sprites;
         final Map<Identifier, TextureAtlasSprite[]> plantSprites;
         final double depth;
-        final java.util.Set<Identifier> missing = java.util.concurrent.ConcurrentHashMap.newKeySet();
+        final Set<Identifier> missing = ConcurrentHashMap.newKeySet();
         final ThreadLocal<Worker> workers = ThreadLocal.withInitial(Worker::new);
         Bank(MaterialBaker baker) {
             finder = baker.spriteFinder(QuadAtlas.BLOCK);
@@ -89,7 +92,7 @@ public final class SnowModels {
                 if (valid) plantMap.put(original, variants);
             });
             plantSprites = Map.copyOf(plantMap);
-            dev.frostedfoliage.client.FrostedFoliageClient.LOGGER.info("Snow atlas bank ready: {} leaf textures, {} plant textures", sprites.size(), plantSprites.size());
+            FrostedFoliageClient.LOGGER.info("Snow atlas bank ready: {} leaf textures, {} plant textures", sprites.size(), plantSprites.size());
         }
 
         private static boolean visible(TextureAtlasSprite sprite) {
@@ -114,8 +117,10 @@ public final class SnowModels {
         @Override public void emitQuads(QuadEmitter emitter, BlockAndTintGetter level, BlockPos pos, BlockState state,
                                         RandomSource random, Predicate<Direction> cullTest) {
             if (level != BlockAndTintGetter.EMPTY) emitGround(emitter, system.ground().layers(pos));
-            boolean plant = system.foliage().isPlant(state);
-            double amount = system.foliage().test(state) && level != BlockAndTintGetter.EMPTY ? system.coverage(pos, plant) : 0;
+            // Every block of every rebuilt chunk passes through here, so test eligibility before anything else.
+            boolean foliage = level != BlockAndTintGetter.EMPTY && system.foliage().test(state);
+            boolean plant = foliage && system.foliage().isPlant(state);
+            double amount = foliage ? system.coverage(pos, plant) : 0;
             if (amount <= 0) { wrapped.emitQuads(emitter, level, pos, state, random, cullTest); return; }
             Worker worker = bank.workers.get();
             // Nested custom models must not overwrite an outer invocation's context.
@@ -151,6 +156,7 @@ public final class SnowModels {
     private static final class Worker {
         final QuadEmitter input = Renderer.get().quadEmitter(this::accept);
         final HeightClipper clipper = new HeightClipper();
+        final float[] ys = new float[4], us = new float[4], vs = new float[4];
         QuadEmitter output;
         Bank bank;
         SnowConfig config;
@@ -178,44 +184,23 @@ public final class SnowModels {
             TextureAtlasSprite[] masks = bank.sprites.get(original.contents().name());
             if (masks == null) {
                 if (bank.missing.size() < 32 && bank.missing.add(original.contents().name())) {
-                    dev.frostedfoliage.client.FrostedFoliageClient.LOGGER.warn("No snow mask for foliage sprite {} (UV {} {})", original.contents().name(), quad.u(0), quad.v(0));
+                    FrostedFoliageClient.LOGGER.warn("No snow mask for foliage sprite {} (UV {} {})", original.contents().name(), quad.u(0), quad.v(0));
                 }
                 return;
             }
             int edge = 0;
             if (clipped && masks.length > LEAF_STRIDE && Math.abs(bank.depth - depth) < 1e-6) {
-                float largestDy = 0;
-                float smallestUv = Float.POSITIVE_INFINITY;
-                for (int i = 1; i < 4; i++) {
-                    float dy = quad.y(i) - quad.y(0);
-                    float du = (quad.u(i) - quad.u(0)) / (original.getU1() - original.getU0());
-                    float dv = (quad.v(i) - quad.v(0)) / (original.getV1() - original.getV0());
-                    float uvDistance = du * du + dv * dv;
-                    if (Math.abs(dy) > largestDy || (Math.abs(dy) == largestDy && uvDistance < smallestUv)) {
-                        largestDy = Math.abs(dy);
-                        smallestUv = uvDistance;
-                        edge = SnowMath.depthEdge(dy, du, dv);
-                    }
+                for (int i = 0; i < 4; i++) {
+                    ys[i] = quad.y(i);
+                    us[i] = (quad.u(i) - original.getU0()) / (original.getU1() - original.getU0());
+                    vs[i] = (quad.v(i) - original.getV0()) / (original.getV1() - original.getV0());
                 }
-                // Unusual shifted/cropped UVs retain geometrically clipped snow instead of a misplaced fade.
-                for (int i = 0; i < 4 && edge != 0; i++) {
-                    if (!SnowMath.depthMappingMatches(edge, quad.y(i),
-                            (quad.u(i) - original.getU0()) / (original.getU1() - original.getU0()),
-                            (quad.v(i) - original.getV0()) / (original.getV1() - original.getV0()))) edge = 0;
-                }
+                edge = SnowMath.quadDepthEdge(ys, us, vs);
             }
             int variant = SnowMath.leafVariant(blockX, blockY, blockZ, face.ordinal());
             TextureAtlasSprite mask = masks[edge * LEAF_STRIDE + variant * STAGES + stage - 1];
             if (mask == null) return;
-            for (int i = 0; i < 4; i++) {
-                float u = (quad.u(i) - original.getU0()) / (original.getU1() - original.getU0());
-                float v = (quad.v(i) - original.getV0()) / (original.getV1() - original.getV0());
-                quad.uv(i, mask.getU(u), mask.getV(v));
-            }
-            int shade = (int) (180 + 75 * config.whiteness());
-            int color = 0xff000000 | shade << 16 | shade << 8 | shade;
-            quad.color(color, color, color, color);
-            quad.tintIndex(-1).chunkLayer(ChunkSectionLayer.CUTOUT).animated(mask.isAnimated()).emissive(false);
+            frost(quad, original, mask);
             if (!clipped) {
                 output.copyFrom(quad);
                 var normal = quad.faceNormal();
@@ -241,6 +226,13 @@ public final class SnowModels {
             int shape = normal.y() > 0.9f ? 0 : plantPart + 1;
             TextureAtlasSprite mask = masks[shape * PLANT_STRIDE + plantVariant * STAGES + stage - 1];
             if (mask == null) return;
+            frost(quad, original, mask);
+            output.copyFrom(quad);
+            output.translate(normal.x() * 0.002f, normal.y() * 0.002f, normal.z() * 0.002f).emit();
+        }
+
+        /** Moves the quad from its source sprite onto the same region of a snow mask, untinted and whitened. */
+        private void frost(MutableQuadView quad, TextureAtlasSprite original, TextureAtlasSprite mask) {
             for (int i = 0; i < 4; i++) {
                 float u = (quad.u(i) - original.getU0()) / (original.getU1() - original.getU0());
                 float v = (quad.v(i) - original.getV0()) / (original.getV1() - original.getV0());
@@ -250,8 +242,6 @@ public final class SnowModels {
             int color = 0xff000000 | shade << 16 | shade << 8 | shade;
             quad.color(color, color, color, color);
             quad.tintIndex(-1).chunkLayer(ChunkSectionLayer.CUTOUT).animated(mask.isAnimated()).emissive(false);
-            output.copyFrom(quad);
-            output.translate(normal.x() * 0.002f, normal.y() * 0.002f, normal.z() * 0.002f).emit();
         }
 
         private void emitClipped(MutableQuadView quad, int a, int b, int c, int d) {

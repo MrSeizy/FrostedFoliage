@@ -3,11 +3,10 @@ package dev.frostedfoliage.client.world;
 import dev.frostedfoliage.config.ConfigDiff;
 import dev.frostedfoliage.config.SnowConfig;
 import dev.frostedfoliage.core.BoundedSectionStore;
+import dev.frostedfoliage.core.ChunkRing;
 import dev.frostedfoliage.core.SectionScheduler;
 import dev.frostedfoliage.core.SnowMath;
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.List;
+import java.util.Locale;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.BlockPos;
@@ -22,19 +21,15 @@ public final class SnowSystem {
     private final GroundSnowSystem ground;
     private final BoundedSectionStore<SectionSnow> snapshots = new BoundedSectionStore<>();
     private final SectionScheduler scheduler = new SectionScheduler(2 * SnowConfig.MAX_CACHED_SECTIONS);
+    private final ChunkRing ring = new ChunkRing();
     private volatile SnowConfig config;
     private volatile Progress progress = new Progress(0, 0);
     private ClientLevel world;
     private double mild, freezing, drySeconds;
     private int ticks, lastSignature = -1;
     private long captures, rebuilds, captureNanos, tickNanos;
-    private int focusX, focusY, focusZ, scanRadius = -1, scanCursor;
+    private int focusX, focusY, focusZ;
     private boolean focused;
-    private List<ChunkOffset> scanOrder = List.of();
-
-    private record ChunkOffset(int x, int z) {
-        long distance() { return (long) x * x + (long) z * z; }
-    }
 
     public record Progress(double mild, double freezing) { }
     public SnowSystem(SnowConfig config) { this.config = config; foliage.refresh(config, false); ground = new GroundSnowSystem(config, foliage); }
@@ -53,13 +48,13 @@ public final class SnowSystem {
         if (diff.exposure()) {
             // Keep old snapshots usable until each environment has been recaptured.
             scheduler.recaptureAll();
-            scanCursor = 0;
+            ring.restart();
         }
         if (diff.appearance()) scheduler.rebuildAll();
         if (diff.cacheSize()) {
             updateFocus(Minecraft.getInstance());
             scheduler.resize(next.maxCachedSections(), snapshots::remove);
-            scanCursor = 0;
+            ring.restart();
         }
     }
 
@@ -68,13 +63,13 @@ public final class SnowSystem {
         foliage.refresh(config, true);
         ground.invalidateAll();
         scheduler.invalidateAll();
-        scanCursor = 0;
+        ring.restart();
     }
 
     public void reset(ClientLevel next) {
         world = next;
         scheduler.clear(); snapshots.clear();
-        focused = false; scanRadius = -1; scanCursor = 0; scanOrder = List.of();
+        focused = false; ring.restart();
         mild = freezing = drySeconds = 0;
         progress = new Progress(0, 0);
         ticks = 0; lastSignature = -1;
@@ -89,7 +84,7 @@ public final class SnowSystem {
         updateFocus(Minecraft.getInstance());
         ground.load(chunk);
         int before = scheduler.size();
-        if (!discover(chunk, true) || scheduler.size() < before) scanCursor = 0;
+        if (!discover(chunk, true) || scheduler.size() < before) ring.restart();
     }
 
     private boolean discover(LevelChunk chunk, boolean invalidate) {
@@ -116,7 +111,7 @@ public final class SnowSystem {
             long key = SectionPos.asLong(chunk.getPos().x(), level.getSectionYFromSectionIndex(i), chunk.getPos().z());
             scheduler.unload(key); snapshots.remove(key);
         }
-        scanCursor = 0;
+        ring.restart();
     }
 
     public void changed(ClientLevel level, BlockPos pos, BlockState oldState, BlockState newState) {
@@ -133,7 +128,7 @@ public final class SnowSystem {
         boolean complete = true;
         // A column's new top can affect foliage below it, never sections above it.
         for (int i = heightChanged ? 0 : section; i <= section; i++) complete &= discoverSection(chunk, i, true);
-        if (!complete || scheduler.size() < before) scanCursor = 0;
+        if (!complete || scheduler.size() < before) ring.restart();
     }
 
     private static boolean changesHeight(LevelChunk chunk, BlockPos pos, BlockState oldState, BlockState newState, Heightmap.Types type) {
@@ -152,34 +147,20 @@ public final class SnowSystem {
                 long dx = (long) SectionPos.x(key) - x, dy = (long) SectionPos.y(key) - y, dz = (long) SectionPos.z(key) - z;
                 return dx * dx + dy * dy + dz * dz;
             });
-            scanCursor = 0;
+            ring.restart();
         }
-        int radius = client.options.getEffectiveRenderDistance();
-        if (radius != scanRadius) {
-            scanRadius = radius;
-            var offsets = new ArrayList<ChunkOffset>();
-            for (int dx = -radius; dx <= radius; dx++) for (int dz = -radius; dz <= radius; dz++) {
-                offsets.add(new ChunkOffset(dx, dz));
-            }
-            offsets.sort(Comparator.comparingLong(ChunkOffset::distance).thenComparingInt(ChunkOffset::x).thenComparingInt(ChunkOffset::z));
-            scanOrder = List.copyOf(offsets);
-            scanCursor = 0;
-        }
+        ring.resize(client.options.getEffectiveRenderDistance());
     }
 
     /** Reconsiders already-loaded chunks after movement without retaining an unbounded rejected-key index. */
     private void discoverNearby() {
         if (!focused) return;
-        for (int i = 0; i < 4 * config.captureBudget() && scanCursor < scanOrder.size(); i++) {
-            ChunkOffset offset = scanOrder.get(scanCursor);
-            if (scheduler.size() >= config.maxCachedSections() && offset.distance() > scheduler.farthestDistance()) {
-                scanCursor = scanOrder.size();
-                return;
-            }
-            LevelChunk chunk = world.getChunkSource().getChunkNow(focusX + offset.x(), focusZ + offset.z());
-            if (chunk != null && !discover(chunk, false)) return;
-            scanCursor++;
-        }
+        ring.scan(4 * config.captureBudget(),
+                () -> scheduler.size() >= config.maxCachedSections() ? scheduler.farthestDistance() : Long.MAX_VALUE,
+                (dx, dz) -> {
+                    LevelChunk chunk = world.getChunkSource().getChunkNow(focusX + dx, focusZ + dz);
+                    return chunk == null || discover(chunk, false);
+                });
     }
 
     public void tick(Minecraft client) {
@@ -211,9 +192,9 @@ public final class SnowSystem {
             if (key == null) break;
             int x = SectionPos.x(key), y = SectionPos.y(key), z = SectionPos.z(key);
             LevelChunk chunk = world.getChunkSource().getChunkNow(x, z);
-            if (chunk == null) { scheduler.unload(key); snapshots.remove(key); scanCursor = 0; continue; }
+            if (chunk == null) { scheduler.unload(key); snapshots.remove(key); ring.restart(); continue; }
             if (!chunk.getSection(world.getSectionIndexFromSectionY(y)).maybeHas(foliage::test)) {
-                scheduler.discard(key, snapshots::remove); scanCursor = 0; continue;
+                scheduler.discard(key, snapshots::remove); ring.restart(); continue;
             }
             long captureStart = System.nanoTime();
             SectionSnow data = SectionSnow.capture(world, chunk, y, foliage, config);
@@ -250,7 +231,7 @@ public final class SnowSystem {
     }
 
     public String diagnostics() {
-        return String.format(java.util.Locale.ROOT,
+        return String.format(Locale.ROOT,
                 "coverage=%.3f/%.3f sections=%d snapshots=%d pending=%d/%d cleanup=%d evictions=%d captures=%d rebuilds=%d captureMs=%.3f tickUs=%.3f snapshotBytes<=%d",
                 mild, freezing, scheduler.size(), snapshots.size(), scheduler.pendingCaptures(), scheduler.pendingRebuilds(), scheduler.pendingCleanup(), scheduler.evictions(), captures, rebuilds,
                 captures == 0 ? 0 : captureNanos / 1e6 / captures, ticks == 0 ? 0 : tickNanos / 1e3 / ticks, snapshots.size() * 4096L)
