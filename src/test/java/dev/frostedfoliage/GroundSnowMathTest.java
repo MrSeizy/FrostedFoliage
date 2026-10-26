@@ -34,6 +34,15 @@ class GroundSnowMathTest {
         assertEquals(6, layers(), "One block of unevenness still counts");
     }
 
+    @Test void sidesHideOnlyBehindSomethingAtLeastAsTall() {
+        assertTrue(GroundSnowMath.sideHidden(3, true, 0, 0), "Solid block");
+        assertTrue(GroundSnowMath.sideHidden(3, false, 3, 0), "Equal real snow");
+        assertTrue(GroundSnowMath.sideHidden(3, false, 0, 8), "Taller virtual snow");
+        assertFalse(GroundSnowMath.sideHidden(3, false, 2, 0), "Lower real snow leaves the top of the side exposed");
+        assertFalse(GroundSnowMath.sideHidden(3, false, 0, 2), "Lower virtual snow leaves the top of the side exposed");
+        assertFalse(GroundSnowMath.sideHidden(1, false, 0, 0), "Nothing beside it");
+    }
+
     @Test void gridEdgesAreSafe() {
         int[] small = new int[4]; byte[] smallSnow = {0, 2, 0, 0};
         assertEquals(2, GroundSnowMath.nearestLayers(small, smallSnow, 2, 0, 0, 0));

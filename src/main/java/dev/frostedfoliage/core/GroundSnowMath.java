@@ -22,6 +22,14 @@ public final class GroundSnowMath {
     private GroundSnowMath() { }
 
     /**
+     * Whether a side of a {@code layers}-tall virtual snow column is covered by what stands beside it: a solid
+     * block, or real or virtual snow at least as tall. Lower snow leaves the upper part of the side visible.
+     */
+    public static boolean sideHidden(int layers, boolean solidBeside, int realLayersBeside, int virtualLayersBeside) {
+        return solidBeside || realLayersBeside >= layers || virtualLayersBeside >= layers;
+    }
+
+    /**
      * Snow layers for the column at ({@code x}, {@code z}) in a {@code width}-wide grid of ground heights and real
      * snow layers. Only columns within one block of {@code height} count; equally near columns take the thinnest.
      */
