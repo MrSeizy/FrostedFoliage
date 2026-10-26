@@ -69,7 +69,7 @@ public final class FrostedFoliageClient implements ClientModInitializer {
                     ctx.getSource().sendFeedback(Component.literal(status)); LOGGER.info(status); return 1;
                 }))
                 .then(literal("reload").executes(ctx -> {
-                    try { applyConfig(store.load()); ctx.getSource().sendFeedback(Component.literal("Frosted Foliage settings reloaded; changed depth/texture masks refresh automatically.")); return 1; }
+                    try { applyConfig(store.load()); ctx.getSource().sendFeedback(Component.translatable("frostedfoliage.command.reload")); return 1; }
                     catch (IOException e) { ctx.getSource().sendError(Component.literal(e.getMessage())); return 0; }
                 })));
             dispatcher.register(literal("snowytrees").redirect(command));
