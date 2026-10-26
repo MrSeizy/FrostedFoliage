@@ -88,8 +88,7 @@ public final class ForestBenchmark {
         FrostedFoliageClient.LOGGER.info("FOREST BENCHMARK {}", new GsonBuilder().create().toJson(row));
     }
     private SnowConfig config(boolean enabled) {
-        var d = SnowConfig.defaults();
-        return new SnowConfig(enabled, true, true, true, 1, 0.9, 0.2, true, 1,
-                8, 6, 0, 0.8, SnowConfig.Quality.MEDIUM, 0.5, 4096, d.includeBlocks(), d.excludeBlocks(), d.extraTextures());
+        return SnowConfig.builder().enabled(enabled).snowDepth(1).accumulationSeconds(8).meltingSeconds(6)
+                .persistenceSeconds(0).build();
     }
 }

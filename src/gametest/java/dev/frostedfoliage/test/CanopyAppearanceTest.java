@@ -21,9 +21,10 @@ public final class CanopyAppearanceTest {
             c.options.pauseOnLostFocus = false;
             c.options.inactivityFpsLimit().set(net.minecraft.client.InactivityFpsLimit.MINIMIZED);
             var d = SnowConfig.defaults();
-            FrostedFoliageClient.system().configure(new SnowConfig(true, true, true, true, 1, 0.9, 0.2, true, 1,
-                    timelapse ? d.accumulationSeconds() : 16, 6, Boolean.getBoolean("frostedfoliage.test.video") ? 600 : 30,
-                    0.8, SnowConfig.Quality.HIGH, 2, 4096, d.includeBlocks(), d.excludeBlocks(), d.extraTextures()));
+            FrostedFoliageClient.system().configure(SnowConfig.builder().snowDepth(1)
+                    .accumulationSeconds(timelapse ? d.accumulationSeconds() : 16).meltingSeconds(6)
+                    .persistenceSeconds(Boolean.getBoolean("frostedfoliage.test.video") ? 600 : 30)
+                    .quality(SnowConfig.Quality.HIGH).maxVisualUpdatesPerSecond(2).build());
         });
         try (var world = context.worldBuilder().adjustSettings(settings -> settings.setName("Frosted Foliage - Natural Spruce")).create()) {
             var server = world.getServer();

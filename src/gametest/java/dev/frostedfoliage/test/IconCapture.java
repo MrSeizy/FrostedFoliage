@@ -23,10 +23,8 @@ public final class IconCapture {
             c.options.cutoutLeaves().set(true);
             c.options.pauseOnLostFocus = false;
             c.options.inactivityFpsLimit().set(net.minecraft.client.InactivityFpsLimit.MINIMIZED);
-            var d = SnowConfig.defaults();
-            FrostedFoliageClient.system().configure(new SnowConfig(true, true, true, true, 1, 0.9, 0.2, true, 1,
-                    6, 240, 3600, 0.8, SnowConfig.Quality.HIGH, 2, 4096,
-                    d.includeBlocks(), d.excludeBlocks(), d.extraTextures()));
+            FrostedFoliageClient.system().configure(SnowConfig.builder().snowDepth(1).accumulationSeconds(6)
+                    .persistenceSeconds(3600).quality(SnowConfig.Quality.HIGH).maxVisualUpdatesPerSecond(2).build());
         });
         var highest = new BlockPos[]{BlockPos.ZERO};
         try (var world = context.worldBuilder().adjustSettings(s -> s.setName("Frosted Foliage - Icon Studio")).create()) {

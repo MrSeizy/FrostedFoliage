@@ -22,10 +22,9 @@ public final class PlantCatalogTest {
     private record Probe(Block block, BlockPos pos, int part) { }
 
     public void run(ClientGameTestContext context) {
-        var d = SnowConfig.defaults();
-        var config = new SnowConfig(true, true, true, true, 0, 0.9, 0.2, true, 0,
-                8, 6, 30, 0.8, SnowConfig.Quality.HIGH, 2, 4096, d.includeBlocks(), d.excludeBlocks(), d.extraTextures())
-                .withPlants(true, 1, 1);
+        var config = SnowConfig.builder().maximumCoverage(0).snowDepth(0).accumulationSeconds(8).meltingSeconds(6)
+                .quality(SnowConfig.Quality.HIGH).maxVisualUpdatesPerSecond(2)
+                .plantsEnabled(true).plantSnowDepth(1).plantMaximumCoverage(1).build();
         var reload = context.computeOnClient(c -> FrostedFoliageClient.applyConfig(config));
         context.waitFor(c -> reload.isDone() && c.gui.overlay() == null, 1200);
         reload.join();

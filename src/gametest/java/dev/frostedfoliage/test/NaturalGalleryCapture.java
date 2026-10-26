@@ -48,10 +48,9 @@ public final class NaturalGalleryCapture {
                 c.options.fov().set(60);
                 c.options.bobView().set(false);
                 c.options.fovEffectScale().set(0.0);
-                var d = SnowConfig.defaults();
-                FrostedFoliageClient.system().configure(new SnowConfig(true, true, true, true, 1, 0.9, 0.2,
-                        true, 0.5, true, 0.5, 0.65, 16, 240, 86400, 0.8, SnowConfig.Quality.HIGH, 2, 8192,
-                        d.includeBlocks(), d.excludeBlocks(), d.extraTextures(), true, true));
+                FrostedFoliageClient.system().configure(SnowConfig.builder().plantSnowDepth(0.5).plantMaximumCoverage(0.65)
+                        .accumulationSeconds(16).persistenceSeconds(86400).quality(SnowConfig.Quality.HIGH)
+                        .maxVisualUpdatesPerSecond(2).maxCachedSections(8192).build());
             });
             for (long seed : new long[]{20261023L, 314159265L}) {
                 try (var world = context.worldBuilder().adjustSettings(s -> {

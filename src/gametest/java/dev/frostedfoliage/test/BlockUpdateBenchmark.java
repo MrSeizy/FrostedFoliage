@@ -176,10 +176,8 @@ public final class BlockUpdateBenchmark {
     }
 
     private static SnowConfig config() {
-        var d = SnowConfig.defaults();
-        return new SnowConfig(true, false, true, true, 1, d.whiteness(), d.variation(), true, d.snowDepth(),
-                8, 6, 0, d.skyExposureSensitivity(), SnowConfig.Quality.MEDIUM, 0.5, 4096,
-                d.includeBlocks(), d.excludeBlocks(), d.extraTextures());
+        return SnowConfig.builder().gradualAccumulation(false).accumulationSeconds(8).meltingSeconds(6)
+                .persistenceSeconds(0).build();
     }
 
     private record Counters(long captures, long rebuilds, long captureNanos, long tickNanos, long ticks) { }

@@ -162,9 +162,9 @@ public final class NearbyCacheTest {
     }
 
     private SnowConfig config(boolean enabled, int limit, SnowConfig.Quality quality, java.util.List<String> excluded) {
-        var d = SnowConfig.defaults();
-        return new SnowConfig(enabled, false, false, true, 1, 0.9, 0, true, 1,
-                1, 1, 0, 0.8, quality, 2, limit, d.includeBlocks(), excluded, d.extraTextures());
+        return SnowConfig.builder().enabled(enabled).gradualAccumulation(false).gradualMelting(false).variation(0)
+                .snowDepth(1).accumulationSeconds(1).meltingSeconds(1).persistenceSeconds(0).quality(quality)
+                .maxVisualUpdatesPerSecond(2).maxCachedSections(limit).excludeBlocks(excluded).build();
     }
 
     private static void check(boolean condition, String message) { if (!condition) throw new AssertionError(message); }

@@ -2,7 +2,6 @@ package dev.frostedfoliage.client.world;
 
 import dev.frostedfoliage.client.FrostedFoliageClient;
 import dev.frostedfoliage.config.SnowConfig;
-import java.util.List;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.chunk.LevelChunk;
@@ -13,8 +12,9 @@ public final class GroundDiscoveryTest {
 
     public static void run(Minecraft client) {
         var original = client.player.position();
-        var config = new SnowConfig(true, false, false, true, 1, 0.9, 0, true, 0.5,
-                1, 1, 0, 0.8, SnowConfig.Quality.LOW, 1, 64, List.of(), List.of(), List.of());
+        var config = SnowConfig.builder().gradualAccumulation(false).gradualMelting(false).variation(0)
+                .accumulationSeconds(1).meltingSeconds(1).persistenceSeconds(0).quality(SnowConfig.Quality.LOW)
+                .maxVisualUpdatesPerSecond(1).maxCachedSections(64).build();
         var foliage = new Foliage(); foliage.refresh(config, true);
         try {
             for (boolean unloading : new boolean[]{false, true}) {
