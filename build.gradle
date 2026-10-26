@@ -65,7 +65,7 @@ def gameTestFlags = [
     reloadTest: 'reload', groundTest: 'ground', galleryCapture: 'gallery', captureTest: 'capture',
     legacyCapture: 'capture.legacy', priorityTest: 'priority', appearanceTest: 'appearance', depthTest: 'depth',
     videoCapture: 'video', timelapseCapture: 'timelapse', plantTest: 'plants', iconCapture: 'icon',
-    vanillaPlants: 'vanillaPlants', treeTypesTest: 'treeTypes', leavesTest: 'leaves',
+    vanillaPlants: 'vanillaPlants', treeTypesTest: 'treeTypes', leavesTest: 'leaves', rebuildTest: 'rebuild',
 ]
 loom.runs.named('clientGameTest') {
     systemProperties.put('frostedfoliage.test.renderer', testRenderer)

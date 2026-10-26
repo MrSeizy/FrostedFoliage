@@ -123,7 +123,7 @@ public final class SnowModels {
             // Every block of every rebuilt chunk passes through here, so test eligibility before anything else.
             boolean foliage = level != BlockAndTintGetter.EMPTY && system.foliage().test(state);
             boolean plant = foliage && system.foliage().isPlant(state);
-            double amount = foliage ? system.coverage(pos, plant) : 0;
+            double amount = foliage ? system.meshCoverage(pos, plant) : 0;
             if (amount <= 0) { wrapped.emitQuads(emitter, level, pos, state, random, cullTest); return; }
             Worker worker = bank.workers.get();
             // Nested custom models must not overwrite an outer invocation's context.
@@ -143,7 +143,7 @@ public final class SnowModels {
         }
 
         private void emitGround(QuadEmitter emitter, BlockAndTintGetter level, BlockPos pos) {
-            int layers = system.ground().layers(pos);
+            int layers = system.ground().meshLayers(pos);
             if (layers == 0) return;
             float height = layers / 8f;
             for (Direction face : Direction.values()) {

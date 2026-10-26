@@ -2,6 +2,6 @@
   "required": true,
   "package": "dev.frostedfoliage.test.mixin",
   "compatibilityLevel": "JAVA_25",
-  "client": ["FrameMetricsMixin"],
+  "client": ["FrameMetricsMixin", "DropSectionRebuildsMixin", "SnowModelMeshMixin"],
   "injectors": {"defaultRequire": 1}
 }
