@@ -59,10 +59,8 @@ public final class ResourceBudgetTest {
         context.runOnClient(c -> {
             c.options.pauseOnLostFocus = false;
             c.options.inactivityFpsLimit().set(net.minecraft.client.InactivityFpsLimit.MINIMIZED);
-            var d = SnowConfig.defaults();
-            FrostedFoliageClient.system().configure(new SnowConfig(true, false, true, true, 1, d.whiteness(), 0, true, 0.5,
-                    8, 6, 0, d.skyExposureSensitivity(), SnowConfig.Quality.MEDIUM, 2, 4096,
-                    d.includeBlocks(), d.excludeBlocks(), d.extraTextures()));
+            FrostedFoliageClient.system().configure(SnowConfig.builder().gradualAccumulation(false).variation(0)
+                    .accumulationSeconds(8).meltingSeconds(6).persistenceSeconds(0).maxVisualUpdatesPerSecond(2).build());
         });
         var probes = new ArrayList<Probe>();
         try (var world = context.worldBuilder().create()) {

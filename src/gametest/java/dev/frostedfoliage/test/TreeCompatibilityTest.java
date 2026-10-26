@@ -24,9 +24,8 @@ public final class TreeCompatibilityTest {
             c.options.renderDistance().set(12);
             c.options.pauseOnLostFocus = false;
             c.options.inactivityFpsLimit().set(net.minecraft.client.InactivityFpsLimit.MINIMIZED);
-            var d = SnowConfig.defaults();
-            FrostedFoliageClient.system().configure(new SnowConfig(true, true, true, true, 1, 0.9, 0.2, true, 1,
-                    8, 6, 30, 0.8, SnowConfig.Quality.HIGH, 2, 4096, d.includeBlocks(), d.excludeBlocks(), d.extraTextures()));
+            FrostedFoliageClient.system().configure(SnowConfig.builder().snowDepth(1).accumulationSeconds(8).meltingSeconds(6)
+                    .quality(SnowConfig.Quality.HIGH).maxVisualUpdatesPerSecond(2).build());
         });
         Map<Block, BlockPos> probes = new LinkedHashMap<>();
         try (var world = context.worldBuilder().adjustSettings(s -> s.setName("Frosted Foliage - Mixed Grove")).create()) {

@@ -184,9 +184,8 @@ public final class PlantSnowTest {
     }
 
     private static SnowConfig config(boolean enabled, double persistence) {
-        var d = SnowConfig.defaults();
-        return new SnowConfig(enabled, true, true, true, 1, 0.9, 0.2, true, 0.5,
-                12, 6, persistence, 0.8, SnowConfig.Quality.HIGH, 2, 4096, d.includeBlocks(), d.excludeBlocks(), d.extraTextures());
+        return SnowConfig.builder().enabled(enabled).accumulationSeconds(12).meltingSeconds(6).persistenceSeconds(persistence)
+                .quality(SnowConfig.Quality.HIGH).maxVisualUpdatesPerSecond(2).build();
     }
 
     private static void apply(ClientGameTestContext context, SnowConfig config) {

@@ -17,6 +17,21 @@ class ConfigAndCacheTest {
         ConfigStore store = new ConfigStore(temp.resolve("frostedfoliage.json"));
         assertEquals(SnowConfig.defaults(), store.load()); assertEquals(SnowConfig.defaults(), store.load());
     }
+    @Test void builderIsTheSingleSourceOfDefaultsAndRoundTrips() throws Exception {
+        var d = SnowConfig.defaults();
+        assertTrue(d.enabled() && d.gradualAccumulation() && d.gradualMelting() && d.moddedFoliage() && d.preferTopFaces());
+        assertEquals(1, d.maximumCoverage()); assertEquals(0.9, d.whiteness()); assertEquals(0.2, d.variation());
+        assertEquals(0.5, d.snowDepth()); assertEquals(0.35, d.plantSnowDepth()); assertEquals(0.6, d.plantMaximumCoverage());
+        assertEquals(180, d.accumulationSeconds()); assertEquals(240, d.meltingSeconds()); assertEquals(30, d.persistenceSeconds());
+        assertEquals(0.8, d.skyExposureSensitivity()); assertEquals(SnowConfig.Quality.MEDIUM, d.quality());
+        assertEquals(0.5, d.maxVisualUpdatesPerSecond()); assertEquals(4096, d.maxCachedSections());
+        assertTrue(d.treeGroundSnow() && d.plantGroundSnow());
+        var custom = d.toBuilder().whiteness(0.3).excludeBlocks(java.util.List.of("Fern")).build();
+        assertEquals(custom, custom.toBuilder().build());
+        assertEquals(java.util.List.of("minecraft:fern"), custom.excludeBlocks());
+        var store = new ConfigStore(temp.resolve("builder.json"));
+        store.save(custom); assertEquals(custom, store.load());
+    }
     @Test void partialConfigKeepsMeaningfulDefaultsAndClampsValues() throws Exception {
         Path file = temp.resolve("config.json");
         Files.writeString(file, "{\"maximumCoverage\":8,\"accumulationSeconds\":-20,\"maxCachedSections\":999999,\"enabled\":null}");

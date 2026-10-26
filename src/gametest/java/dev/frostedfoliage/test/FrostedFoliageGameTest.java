@@ -41,9 +41,8 @@ public final class FrostedFoliageGameTest implements FabricClientGameTest {
             context.runOnClient(c -> c.gui.setScreen(null));
         }
         context.runOnClient(client -> {
-            var d = SnowConfig.defaults();
-            FrostedFoliageClient.system().configure(new SnowConfig(true, true, true, true, 1, 0.9, 0.2, true, 1,
-                    12, 6, 0, 0.8, SnowConfig.Quality.HIGH, 2, 4096, d.includeBlocks(), d.excludeBlocks(), d.extraTextures()));
+            FrostedFoliageClient.system().configure(SnowConfig.builder().snowDepth(1).accumulationSeconds(12).meltingSeconds(6)
+                    .persistenceSeconds(0).quality(SnowConfig.Quality.HIGH).maxVisualUpdatesPerSecond(2).build());
         });
         try (var world = context.worldBuilder().create()) {
             var server = world.getServer();

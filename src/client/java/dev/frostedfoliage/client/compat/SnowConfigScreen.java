@@ -108,12 +108,16 @@ public final class SnowConfigScreen {
                 .setTooltipSupplier(tooltip("Add missing textures for included blocks. Example: minecraft:block/fern.")).build();
         blocks.addEntry(include); blocks.addEntry(exclude); blocks.addEntry(textures);
         builder.setSavingRunnable(() -> {
-            var updated = new SnowConfig(enabled.getValue(), accumulation.getValue(), melting.getValue(), modded.getValue(),
-                    maximum.getValue()/100d, whiteness.getValue()/100d, variation.getValue()/100d, top.getValue(), depth.getValue()/100d,
-                    plantsEnabled.getValue(), plantDepth.getValue()/100d, plantMaximum.getValue()/100d,
-                    accSeconds.getValue(), meltSeconds.getValue(), persistence.getValue(), exposure.getValue()/100d, quality.getValue(),
-                    frequency.getValue(), limit.getValue(), include.getValue(), exclude.getValue(), textures.getValue(),
-                    treeGround.getValue(), plantGround.getValue());
+            var updated = c.toBuilder().enabled(enabled.getValue()).gradualAccumulation(accumulation.getValue())
+                    .gradualMelting(melting.getValue()).moddedFoliage(modded.getValue()).maximumCoverage(maximum.getValue()/100d)
+                    .whiteness(whiteness.getValue()/100d).variation(variation.getValue()/100d).preferTopFaces(top.getValue())
+                    .snowDepth(depth.getValue()/100d).plantsEnabled(plantsEnabled.getValue()).plantSnowDepth(plantDepth.getValue()/100d)
+                    .plantMaximumCoverage(plantMaximum.getValue()/100d).accumulationSeconds(accSeconds.getValue())
+                    .meltingSeconds(meltSeconds.getValue()).persistenceSeconds(persistence.getValue())
+                    .skyExposureSensitivity(exposure.getValue()/100d).quality(quality.getValue())
+                    .maxVisualUpdatesPerSecond(frequency.getValue()).maxCachedSections(limit.getValue())
+                    .includeBlocks(include.getValue()).excludeBlocks(exclude.getValue()).extraTextures(textures.getValue())
+                    .treeGroundSnow(treeGround.getValue()).plantGroundSnow(plantGround.getValue()).build();
             try {
                 FrostedFoliageClient.saveConfig(updated);
             } catch (java.io.IOException e) {
