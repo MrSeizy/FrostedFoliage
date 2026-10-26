@@ -65,7 +65,7 @@ Settings are grouped into five tabs:
 
 *Plant frost at the default 35% depth and 60% coverage.*
 
-Changes apply while playing. Some changes, including snow depth, trigger a brief resource reload.
+Changes apply while playing. Some changes, including snow depth, trigger a brief resource reload; their tooltips say so.
 
 Without the settings screen, edit `config/frostedfoliage.json` in your instance folder and run `/frostedfoliage reload` in chat.
 

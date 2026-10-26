@@ -23,5 +23,9 @@
     "minecraft": "~26.3",
     "java": ">=25",
     "fabric-api": ">=0.164.0+26.3"
+  },
+  "suggests": {
+    "modmenu": "*",
+    "cloth-config": ">=26.3.159"
   }
 }
