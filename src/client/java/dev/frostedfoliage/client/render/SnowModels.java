@@ -122,7 +122,7 @@ public final class SnowModels {
             if (worker.output != null) worker = new Worker();
             worker.output = emitter; worker.bank = bank; worker.amount = amount; worker.config = system.config();
             worker.plant = plant; worker.plantPart = PlantTypes.part(state);
-            worker.plantVariant = SnowMath.noise(pos.getX(), pos.getY(), pos.getZ()) < 0.5 ? 0 : 1;
+            worker.plantVariant = SnowMath.plantVariant(pos.getX(), pos.getY(), pos.getZ());
             worker.blockX = pos.getX(); worker.blockY = pos.getY(); worker.blockZ = pos.getZ();
             int open = 0;
             if (!plant) for (Direction d : Direction.Plane.HORIZONTAL) {

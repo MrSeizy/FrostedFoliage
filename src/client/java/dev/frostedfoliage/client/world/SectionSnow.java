@@ -43,7 +43,7 @@ public final class SectionSnow {
                 double exposure = SnowMath.exposure(snow, solidTop > pos.getY(), canopyTop - pos.getY(), config.skyExposureSensitivity());
                 int amount = (int) Math.round(exposure * 127);
                 if (amount > 0) {
-                    data[index(x, y, z)] = (byte) (amount | (biome.getBaseTemperature() < 0 ? 128 : 0));
+                    data[index(x, y, z)] = (byte) (amount | (SnowMath.freezing(biome.getBaseTemperature()) ? 128 : 0));
                     any = true;
                 }
             }
