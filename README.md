@@ -14,7 +14,7 @@ https://github.com/user-attachments/assets/e2ab33a6-5dec-4d90-b7f9-0bff27126a68
 
 ## Features
 
-- **Gradual snowfall and melting.** Exposed foliage gathers snow first, with slower buildup beneath tree canopies and slower melting in freezing biomes.
+- **Gradual snowfall and melting.** Exposed foliage gathers snow first, with slower buildup beneath tree canopies and slower melting in snowy biomes such as snowy plains and snowy taiga.
 - **Separate controls for trees and plants.** Choose how far snow reaches down the foliage and how much of its texture turns white.
 - **Snow beneath the canopy.** Fill bare patches under trees and plants when nearby ground already has snow.
 - **Resource pack support.** Snow follows the active foliage textures, including transparent gaps. No extra texture pack is needed.

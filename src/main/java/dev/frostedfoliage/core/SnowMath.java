@@ -4,6 +4,8 @@ import dev.frostedfoliage.config.SnowConfig;
 
 public final class SnowMath {
     public static final int LEAF_VARIANTS = 8;
+    /** Vanilla's rain/snow boundary: below it a biome snows even at sea level. */
+    public static final float FREEZING_TEMPERATURE = 0.15f;
     private SnowMath() { }
 
     public static long mix(long n) {
@@ -22,6 +24,16 @@ public final class SnowMath {
         long seed = mix(x * 0x632be59bd9b4e019L ^ y * 0x9e3779b97f4a7c15L
                 ^ z * 0x85157af5L ^ (face + 1L) * 0xd1b54a32d192ed03L);
         return ((x ^ y ^ z ^ face) & 1) * half + ((int) seed & (half - 1));
+    }
+
+    /** Salted so the pattern stays independent of {@link #noise}, which sets each block's buildup speed. */
+    public static int plantVariant(int x, int y, int z) {
+        return (int) (mix(x * 0x632be59bd9b4e019L ^ y * 0x9e3779b97f4a7c15L ^ z * 0x85157af5L ^ 0x2545f4914f6cdd1dL) >>> 63);
+    }
+
+    /** Snowy biomes (snowy plains, snowy taiga, ice spikes...) rather than places that only snow at altitude. */
+    public static boolean freezing(float baseTemperature) {
+        return baseTemperature < FREEZING_TEMPERATURE;
     }
 
     public static double exposure(boolean snowPrecipitation, boolean roof, int leafDepth, double sensitivity) {

@@ -37,6 +37,12 @@ class SnowMathTest {
         assertEquals(1, SnowMath.advance(1, 0, 0.05, 20, false, c));
         assertEquals(0, SnowMath.advance(1, 0, 0.05, 31, false, c));
     }
+    @Test void biomesThatSnowAtSeaLevelMeltAsFreezing() {
+        // Vanilla 26.3 base temperatures: snowy_taiga, grove, frozen_peaks, then snowy_plains/ice_spikes/frozen_river and snowy_beach.
+        for (float temperature : new float[]{-0.5f, -0.2f, -0.7f, 0.0f, 0.05f}) assertTrue(SnowMath.freezing(temperature), "temperature " + temperature);
+        // Taiga, old growth pine taiga and windswept hills only snow at altitude.
+        for (float temperature : new float[]{0.15f, 0.25f, 0.3f, 0.2f}) assertFalse(SnowMath.freezing(temperature), "temperature " + temperature);
+    }
     @Test void disablingImmediatelyRemovesSnow() throws Exception {
         assertEquals(0, SnowMath.advance(1, 1, 1, 0, true, config("{\"enabled\":false}")));
     }

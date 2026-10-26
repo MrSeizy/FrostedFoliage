@@ -23,6 +23,19 @@ class SnowVariationTest {
         assertEquals(SnowMath.LEAF_VARIANTS, used.size());
     }
 
+    @Test void plantPatternIsIndependentOfPerBlockBuildupSpeed() {
+        int[][] counts = new int[2][2];
+        for (int x = -64; x < 64; x++) for (int z = -64; z < 64; z++) for (int y = 60; y < 68; y++) {
+            int variant = SnowMath.plantVariant(x, y, z);
+            assertEquals(variant, SnowMath.plantVariant(x, y, z));
+            counts[SnowMath.noise(x, y, z) < 0.5 ? 0 : 1][variant]++;
+        }
+        for (int[] half : counts) {
+            double share = half[0] / (double) (half[0] + half[1]);
+            assertEquals(0.5, share, 0.02, "Plant pattern follows buildup noise");
+        }
+    }
+
     @Test void everyVariantHasDistinctBuildupAndDepthPatternsWithNestedCoverage() {
         var buildupPatterns = new HashSet<BitSet>();
         var depthPatterns = new HashSet<BitSet>();
