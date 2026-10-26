@@ -4,8 +4,10 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import dev.frostedfoliage.client.FrostedFoliageClient;
 import dev.frostedfoliage.client.world.PlantTypes;
 import dev.frostedfoliage.core.PlantSnow;
+import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
@@ -146,7 +148,7 @@ final class FoliageTextures {
     }
 
     private static void malformed(Identifier path, String field, String expected) {
-        dev.frostedfoliage.client.FrostedFoliageClient.LOGGER.warn(
+        FrostedFoliageClient.LOGGER.warn(
                 "Skipping invalid foliage resource field {} in {}: expected {}", field, path, expected);
     }
 
@@ -155,8 +157,8 @@ final class FoliageTextures {
         if (resource.isEmpty()) return null;
         try (var reader = new InputStreamReader(resource.get().open(), StandardCharsets.UTF_8)) {
             return JsonParser.parseReader(reader).getAsJsonObject();
-        } catch (java.io.IOException | RuntimeException e) {
-            dev.frostedfoliage.client.FrostedFoliageClient.LOGGER.warn("Cannot inspect foliage model {}: {}", path, e.toString());
+        } catch (IOException | RuntimeException e) {
+            FrostedFoliageClient.LOGGER.warn("Cannot inspect foliage model {}: {}", path, e.toString());
             return null;
         }
     }

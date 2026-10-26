@@ -2,6 +2,7 @@ package dev.frostedfoliage.client.world;
 
 import dev.frostedfoliage.config.SnowConfig;
 import dev.frostedfoliage.core.SnowMath;
+import java.util.Arrays;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.SectionPos;
@@ -20,7 +21,7 @@ public final class SectionSnow {
     }
     public boolean hasSnow() { return hasSnow; }
     public boolean sameEnvironment(SectionSnow other) {
-        return other != null && java.util.Arrays.equals(environment, other.environment);
+        return other != null && Arrays.equals(environment, other.environment);
     }
     public int sample(BlockPos pos) { return environment[index(pos.getX(), pos.getY(), pos.getZ())] & 255; }
     private static int index(int x, int y, int z) { return (y & 15) << 8 | (z & 15) << 4 | x & 15; }

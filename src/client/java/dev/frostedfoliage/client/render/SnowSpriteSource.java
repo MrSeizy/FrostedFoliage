@@ -6,7 +6,9 @@ import dev.frostedfoliage.client.FrostedFoliageClient;
 import dev.frostedfoliage.core.PlantSnow;
 import dev.frostedfoliage.core.SnowMath;
 import dev.frostedfoliage.core.TextureBudget;
+import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -58,7 +60,7 @@ public final class SnowSpriteSource implements SpriteSource {
         // Resolve textures used by eligible models, not unrelated bamboo/dripleaf filenames.
         var resources = manager.listResources("textures", id -> id.getPath().endsWith(".png")
                 && (leaves.contains(TEXTURE_ID_CONVERTER.fileToId(id)) || plantUses.containsKey(TEXTURE_ID_CONVERTER.fileToId(id))));
-        var candidates = resources.entrySet().stream().sorted(java.util.Comparator
+        var candidates = resources.entrySet().stream().sorted(Comparator
                 .<Map.Entry<Identifier, Resource>, Boolean>comparing(e -> !leaves.contains(TEXTURE_ID_CONVERTER.fileToId(e.getKey())))
                 .thenComparing(Map.Entry::getKey)).limit(256).toList();
         if (resources.size() > candidates.size()) FrostedFoliageClient.LOGGER.warn("Snow texture discovery limited to 256 of {} sources", resources.size());
@@ -131,7 +133,7 @@ public final class SnowSpriteSource implements SpriteSource {
                 generated.size(), generatedPlants.size(), totalMasks, catalog.texels(), depth, plantDepth);
     }
 
-    private static FoliageTextures.Bounds visibleBounds(NativeImage image, Resource resource) throws java.io.IOException {
+    private static FoliageTextures.Bounds visibleBounds(NativeImage image, Resource resource) throws IOException {
         FrameSize frame = resource.metadata().getSection(AnimationMetadataSection.TYPE)
                 .map(a -> a.calculateFrameSize(image.getWidth(), image.getHeight())).orElse(new FrameSize(image.getWidth(), image.getHeight()));
         int min = frame.height(), max = -1;

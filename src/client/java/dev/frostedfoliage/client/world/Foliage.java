@@ -13,22 +13,25 @@ import net.minecraft.world.level.block.state.BlockState;
 public final class Foliage {
     private volatile Set<Block> blocks = Set.of();
     private volatile Set<Block> groundPlants = Set.of();
+    // Chunk meshing asks this for every block, so cache the class checks once.
+    private volatile Set<Block> plants = Set.of();
     public void refresh(SnowConfig config, boolean tagsBound) {
+        plants = BuiltInRegistries.BLOCK.stream().filter(PlantTypes::supported).collect(Collectors.toUnmodifiableSet());
         blocks = BuiltInRegistries.BLOCK.stream().filter(block -> FoliageRules.includes(
                 BuiltInRegistries.BLOCK.getKey(block).toString(),
                 block instanceof LeavesBlock || (tagsBound && block.defaultBlockState().is(BlockTags.LEAVES)),
-                PlantTypes.supported(block), config))
+                plants.contains(block), config))
                 .collect(Collectors.toUnmodifiableSet());
-        groundPlants = BuiltInRegistries.BLOCK.stream().filter(PlantTypes::supported)
+        groundPlants = plants.stream()
                 .filter(block -> FoliageRules.includes(BuiltInRegistries.BLOCK.getKey(block).toString(), true, config))
                 .collect(Collectors.toUnmodifiableSet());
     }
     /** Built-in leaf/plant classes are always discovered; only these additions depend on rules/tags. */
     public Set<Block> extraLeafBlocks() {
-        return blocks.stream().filter(block -> !(block instanceof LeavesBlock) && !PlantTypes.supported(block))
+        return blocks.stream().filter(block -> !(block instanceof LeavesBlock) && !plants.contains(block))
                 .collect(Collectors.toUnmodifiableSet());
     }
     public boolean test(BlockState state) { return blocks.contains(state.getBlock()); }
-    public boolean isPlant(BlockState state) { return PlantTypes.supported(state.getBlock()); }
+    public boolean isPlant(BlockState state) { return plants.contains(state.getBlock()); }
     public boolean groundPlant(BlockState state) { return groundPlants.contains(state.getBlock()); }
 }

@@ -3,13 +3,12 @@ package dev.frostedfoliage.client.world;
 import dev.frostedfoliage.config.ConfigDiff;
 import dev.frostedfoliage.config.SnowConfig;
 import dev.frostedfoliage.core.BoundedSectionStore;
+import dev.frostedfoliage.core.ChunkRing;
+import dev.frostedfoliage.core.GroundSnowMath;
 import dev.frostedfoliage.core.SectionScheduler;
-import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import net.minecraft.client.Minecraft;
@@ -26,29 +25,21 @@ import net.minecraft.world.level.levelgen.Heightmap;
 
 /** Main-thread terrain capture; chunk workers read immutable column results only. */
 public final class GroundSnowSystem {
-    public static final int RADIUS = 8;
-    private static final int MAX_CHUNKS = 4096;
+    private static final int RADIUS = GroundSnowMath.RADIUS, MAX_CHUNKS = 4096;
     private final Foliage foliage;
     private volatile SnowConfig config;
     private ClientLevel world;
     private final BoundedSectionStore<Cover> snapshots = new BoundedSectionStore<>();
     // Chunk coordinates use section keys with y=0 so the existing bounded scheduler can be shared.
     private final SectionScheduler scheduler = new SectionScheduler(2 * MAX_CHUNKS);
+    private final ChunkRing ring = new ChunkRing();
     private final Map<Long, Set<Integer>> dirtySections = new HashMap<>();
-    private List<Offset> scan = List.of();
-    private int cursor, radius = -1, focusX, focusZ;
+    // Block updates arrive on the client thread only, so one scratch position serves them all.
+    private final BlockPos.MutableBlockPos scratch = new BlockPos.MutableBlockPos();
+    private int focusX, focusZ;
     private boolean focused, rescan;
     private Long rebuilding;
     private long captures, captureNanos, rebuilds;
-    private record Offset(int x, int z) { long distance() { return (long)x*x + (long)z*z; } }
-    private static final List<Offset> SEARCH = searchOffsets();
-    private static List<Offset> searchOffsets() {
-        var offsets = new ArrayList<Offset>();
-        for (int z = -RADIUS; z <= RADIUS; z++) for (int x = -RADIUS; x <= RADIUS; x++)
-            if (x*x + z*z > 0 && x*x + z*z <= RADIUS*RADIUS) offsets.add(new Offset(x, z));
-        offsets.sort(Comparator.comparingLong(Offset::distance));
-        return List.copyOf(offsets);
-    }
     private record Cover(int[] heights, byte[] layers, byte[] kinds, boolean candidates) {
         boolean any() { for (byte n : layers) if (n != 0) return true; return false; }
         boolean same(Cover other) {
@@ -73,7 +64,7 @@ public final class GroundSnowSystem {
 
     void reset(ClientLevel level) {
         world = level; scheduler.clear(); snapshots.clear(); dirtySections.clear();
-        scan = List.of(); cursor = 0; radius = -1; focused = rescan = false; captures = captureNanos = rebuilds = 0;
+        ring.restart(); focused = rescan = false; captures = captureNanos = rebuilds = 0;
         rebuilding = null;
     }
 
@@ -81,11 +72,11 @@ public final class GroundSnowSystem {
         var diff = new ConfigDiff(config, next);
         config = next;
         if (diff.groundSnow()) invalidateAll();
-        if (diff.cacheSize()) { scheduler.resize(limit(), this::remove); cursor = 0; }
+        if (diff.cacheSize()) { scheduler.resize(limit(), this::remove); ring.restart(); }
     }
 
     void invalidateAll() {
-        scheduler.recaptureAll(); cursor = 0;
+        scheduler.recaptureAll(); ring.restart();
         for (long key : scheduler.retainedKeys()) {
             Cover cover = snapshots.get(key);
             if (cover != null && cover.any()) { mark(key, cover); scheduler.rebuild(key); }
@@ -108,19 +99,17 @@ public final class GroundSnowSystem {
     }
 
     void changed(LevelChunk chunk, BlockPos pos, BlockState oldState, BlockState newState, boolean heightChanged) {
-        boolean plantChanged = !oldState.equals(newState)
-                && (PlantTypes.supported(oldState.getBlock()) || PlantTypes.supported(newState.getBlock()));
+        int x = pos.getX() & 15, z = pos.getZ() & 15, ground = groundHeight(chunk, x, z, scratch);
+        boolean replaced = !oldState.equals(newState);
+        boolean plantChanged = replaced && (foliage.isPlant(oldState) || foliage.isPlant(newState));
         // Equal heightmap predicates can still change the ground or canopy's eligibility.
-        boolean surfaceChanged = !oldState.equals(newState)
-                && (pos.getY() == groundHeight(chunk, pos.getX() & 15, pos.getZ() & 15)
-                || pos.getY() == chunk.getHeight(Heightmap.Types.MOTION_BLOCKING, pos.getX() & 15, pos.getZ() & 15));
+        boolean surfaceChanged = replaced
+                && (pos.getY() == ground || pos.getY() == chunk.getHeight(Heightmap.Types.MOTION_BLOCKING, x, z));
         if (heightChanged || plantChanged || surfaceChanged) { invalidateAround(chunk.getPos().x(), chunk.getPos().z(), false); return; }
-        if ((oldState.is(Blocks.SNOW) || newState.is(Blocks.SNOW))
-                && groundHeight(chunk, pos.getX() & 15, pos.getZ() & 15) + 1 == pos.getY()) {
+        if ((oldState.is(Blocks.SNOW) || newState.is(Blocks.SNOW)) && ground + 1 == pos.getY()) {
             invalidateAround(chunk.getPos().x(), chunk.getPos().z(), true);
         }
-        if (oldState.isAir() != newState.isAir()
-                && groundHeight(chunk, pos.getX() & 15, pos.getZ() & 15) + 1 == pos.getY()) {
+        if (oldState.isAir() != newState.isAir() && ground + 1 == pos.getY()) {
             // Torches, carpet and leaves below a canopy can change eligibility without moving either heightmap.
             long key = key(chunk.getPos().x(), chunk.getPos().z());
             if (snapshots.get(key) != null) scheduler.discover(key, limit(), true, this::remove);
@@ -147,7 +136,7 @@ public final class GroundSnowSystem {
         if (world == null || client.player == null) return;
         int x = client.player.blockPosition().getX() >> 4, z = client.player.blockPosition().getZ() >> 4;
         if (!focused || x != focusX || z != focusZ) {
-            focusX = x; focusZ = z; focused = true; cursor = 0; rescan = false;
+            focusX = x; focusZ = z; focused = true; ring.restart(); rescan = false;
             scheduler.prioritize(k -> { long dx = SectionPos.x(k) - x, dz = SectionPos.z(k) - z; return dx*dx + dz*dz; });
         }
     }
@@ -156,22 +145,13 @@ public final class GroundSnowSystem {
         if (world == null || client.player == null) return;
         updateFocus(client);
         int x = focusX, z = focusZ;
-        int distance = client.options.getEffectiveRenderDistance();
-        if (radius != distance) {
-            radius = distance; cursor = 0; rescan = false; var offsets = new ArrayList<Offset>();
-            for (int dx = -radius; dx <= radius; dx++) for (int dz = -radius; dz <= radius; dz++) offsets.add(new Offset(dx, dz));
-            offsets.sort(Comparator.comparingLong(Offset::distance).thenComparingInt(Offset::x).thenComparingInt(Offset::z)); scan = List.copyOf(offsets);
-        }
+        if (ring.resize(client.options.getEffectiveRenderDistance())) rescan = false;
         if (enabled()) {
             // Coalesce retries after the current pass: streaming events must never starve later offsets.
-            if (rescan && cursor >= scan.size()) { cursor = 0; rescan = false; }
-            for (int i = 0; i < 4 * config.captureBudget() && cursor < scan.size(); i++) {
-                Offset offset = scan.get(cursor);
-                if (scheduler.size() >= limit() && offset.distance() > scheduler.farthestDistance()) { cursor = scan.size(); break; }
-                LevelChunk chunk = world.getChunkSource().getChunkNow(x + offset.x, z + offset.z);
-                if (chunk != null && !scheduler.discover(key(x + offset.x, z + offset.z), limit(), false, this::remove)) break;
-                cursor++;
-            }
+            if (rescan && ring.finished()) { ring.restart(); rescan = false; }
+            ring.scan(4 * config.captureBudget(), () -> scheduler.size() >= limit() ? scheduler.farthestDistance() : Long.MAX_VALUE,
+                    (dx, dz) -> world.getChunkSource().getChunkNow(x + dx, z + dz) == null
+                            || scheduler.discover(key(x + dx, z + dz), limit(), false, this::remove));
             for (int i = 0; i < config.captureBudget(); i++) {
                 Long key = scheduler.nextCapture(); if (key == null) break;
                 LevelChunk chunk = world.getChunkSource().getChunkNow(SectionPos.x(key), SectionPos.z(key));
@@ -197,17 +177,13 @@ public final class GroundSnowSystem {
         }
     }
 
-    private int groundHeight(LevelChunk chunk, int x, int z) {
-        return groundHeight(chunk, x, z, new BlockPos.MutableBlockPos());
-    }
-
     private int groundHeight(LevelChunk chunk, int x, int z, BlockPos.MutableBlockPos pos) {
         int y = chunk.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x, z);
         pos.set(chunk.getPos().getMinBlockX() + x, y, chunk.getPos().getMinBlockZ() + z);
         // Dense shrubs can participate in the heightmap; their supporting surface is still ground.
         for (int i = 0; i < 3; i++) {
             BlockState state = chunk.getBlockState(pos);
-            if (!PlantTypes.supported(state.getBlock()) && !state.is(Blocks.SNOW)) break;
+            if (!foliage.isPlant(state) && !state.is(Blocks.SNOW)) break;
             pos.setY(--y);
         }
         return y;
@@ -248,14 +224,7 @@ public final class GroundSnowSystem {
         }
         for (int z = 0; z < 16; z++) for (int x = 0; x < 16; x++) {
             int i = z * 16 + x; if (kinds[i] == 0) continue;
-            int nearest = RADIUS * RADIUS + 1, amount = 0;
-            for (Offset offset : SEARCH) {
-                int d = (int) offset.distance(); if (d > nearest) break;
-                int n = (z + RADIUS + offset.z) * width + x + RADIUS + offset.x;
-                if (snow[n] == 0 || Math.abs(nearbyHeights[n] - heights[i]) > 1) continue;
-                amount = d < nearest ? snow[n] : Math.min(amount, snow[n]); nearest = d;
-            }
-            layers[i] = (byte) amount;
+            layers[i] = (byte) GroundSnowMath.nearestLayers(nearbyHeights, snow, width, x + RADIUS, z + RADIUS, heights[i]);
         }
         return new Cover(heights, layers, kinds, true);
     }
