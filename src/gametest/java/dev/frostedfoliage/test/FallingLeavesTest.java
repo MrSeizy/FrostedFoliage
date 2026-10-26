@@ -76,41 +76,40 @@ public final class FallingLeavesTest {
             capture(context, "leaves-frosted");
             context.runOnClient(c -> FrostedFoliageClient.LOGGER.info("FALLING LEAVES frosted sprites verified for poplar, oak and cherry"));
 
-            // At full snow, depth and coverage set the share of falling leaves that come down white.
+            // At full snow, depth and coverage set the share of falling leaves that come down white. Each share comes from
+            // 4,000 leaves, so a 0.05 margin is more than six standard deviations wide.
             SnowConfig full = context.computeOnClient(c -> FrostedFoliageClient.system().config());
             context.runOnClient(c -> FrostedFoliageClient.system().configure(full.withSnowDepth(0)));
-            int topsOnly = context.computeOnClient(c -> frosted(c, POPLAR, 400));
-            check(topsOnly == 0, "Tops-only snow frosted " + topsOnly + " of 400 falling leaves");
+            double topsOnly = context.computeOnClient(c -> share(c, POPLAR));
+            check(topsOnly == 0, "Tops-only snow frosted " + topsOnly + " of falling leaves");
             context.runOnClient(c -> FrostedFoliageClient.system().configure(full.withSnowDepth(0.5)));
-            int halfDepth = context.computeOnClient(c -> frosted(c, POPLAR, 400));
-            check(halfDepth > 140 && halfDepth < 260, "Half-depth snow frosted " + halfDepth + " of 400 falling leaves");
+            double halfDepth = context.computeOnClient(c -> share(c, POPLAR));
+            check(Math.abs(halfDepth - 0.5) < 0.05, "Half-depth snow frosted " + halfDepth + " of falling leaves");
             context.runOnClient(c -> FrostedFoliageClient.system().configure(full.toBuilder().snowDepth(1).maximumCoverage(0.5).build()));
-            int halfCoverage = context.computeOnClient(c -> frosted(c, POPLAR, 400));
-            check(halfCoverage > 140 && halfCoverage < 260, "Half-coverage snow frosted " + halfCoverage + " of 400 falling leaves");
+            double halfCoverage = context.computeOnClient(c -> share(c, POPLAR));
+            check(Math.abs(halfCoverage - 0.5) < 0.05, "Half-coverage snow frosted " + halfCoverage + " of falling leaves");
             context.runOnClient(c -> FrostedFoliageClient.system().configure(full.toBuilder().snowDepth(0.5).maximumCoverage(0.5).build()));
-            int halfBoth = context.computeOnClient(c -> frosted(c, POPLAR, 400));
-            check(halfBoth > 50 && halfBoth < 150, "Half-depth, half-coverage snow frosted " + halfBoth + " of 400 falling leaves");
+            double halfBoth = context.computeOnClient(c -> share(c, POPLAR));
+            check(Math.abs(halfBoth - 0.25) < 0.05, "Half-depth, half-coverage snow frosted " + halfBoth + " of falling leaves");
 
             // During real snowfall, more leaves come down white as the snow builds up.
             context.runOnClient(c -> {
                 FrostedFoliageClient.system().setPreview(false);
                 FrostedFoliageClient.system().configure(full.toBuilder().accumulationSeconds(20).build());
-                c.particleEngine.clearParticles();
             });
             context.waitFor(c -> FrostedFoliageClient.system().coverage(POPLAR) == 0, 200);
             server.runCommand("weather rain 100000");
             context.waitFor(c -> FrostedFoliageClient.system().coverage(POPLAR) > 0.15, 1200);
-            double[] early = context.computeOnClient(c -> new double[]{FrostedFoliageClient.system().coverage(POPLAR), frosted(c, POPLAR, 400) / 400.0});
+            double[] early = context.computeOnClient(c -> new double[]{FrostedFoliageClient.system().coverage(POPLAR), share(c, POPLAR)});
             context.waitFor(c -> FrostedFoliageClient.system().coverage(POPLAR) > 0.95, 1200);
-            double[] late = context.computeOnClient(c -> new double[]{FrostedFoliageClient.system().coverage(POPLAR), frosted(c, POPLAR, 400) / 400.0});
+            double[] late = context.computeOnClient(c -> new double[]{FrostedFoliageClient.system().coverage(POPLAR), share(c, POPLAR)});
             for (double[] sample : new double[][]{early, late}) {
-                check(Math.abs(sample[1] - sample[0]) < 0.1, "At coverage " + sample[0] + ", " + sample[1] + " of falling leaves were frosted");
+                check(Math.abs(sample[1] - sample[0]) < 0.05, "At coverage " + sample[0] + ", " + sample[1] + " of falling leaves were frosted");
             }
             check(late[1] > early[1] + 0.2, "Frosted leaves did not increase with buildup: " + early[1] + " then " + late[1]);
             server.runCommand("weather clear");
             context.runOnClient(c -> {
-                c.particleEngine.clearParticles();
-                FrostedFoliageClient.LOGGER.info("FALLING LEAVES settings verified: {}/400 at 0% depth, {}/400 at 50% depth, {}/400 at 50% coverage, {}/400 at 50% of both",
+                FrostedFoliageClient.LOGGER.info("FALLING LEAVES settings verified: {} frosted at 0% depth, {} at 50% depth, {} at 50% coverage, {} at 50% of both",
                         topsOnly, halfDepth, halfCoverage, halfBoth);
                 FrostedFoliageClient.LOGGER.info("FALLING LEAVES buildup verified: {} frosted at coverage {}, {} at coverage {}",
                         early[1], early[0], late[1], late[0]);
@@ -130,13 +129,14 @@ public final class FallingLeavesTest {
         return context.computeOnClient(c -> drop(c, options, leaf));
     }
 
-    /** How many of {@code count} poplar leaves dropped by the block at {@code leaf} come down frosted. */
-    private static int frosted(Minecraft client, BlockPos leaf, int count) {
+    /** The share of 4,000 poplar leaves dropped by the block at {@code leaf} that come down frosted. */
+    private static double share(Minecraft client, BlockPos leaf) {
         int frosted = 0;
-        for (int i = 0; i < count; i++) {
+        for (int i = 0; i < 4000; i++) {
             if (drop(client, ParticleTypes.ORANGE_POPLAR_LEAVES, leaf).getNamespace().equals("frostedfoliage")) frosted++;
         }
-        return frosted;
+        client.particleEngine.clearParticles();
+        return frosted / 4000.0;
     }
 
     /** The particle a leaf block at {@code leaf} would drop, as ParticleUtils.spawnParticleBelow places it. */
