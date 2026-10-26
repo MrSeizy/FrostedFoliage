@@ -97,27 +97,6 @@ class ConfigAndCacheTest {
         store.save(repaired);
         assertEquals(0.25, store.load().snowDepth());
     }
-    @Test void renamePreservesLegacySettingsAndPrefersTheNewFile() throws Exception {
-        Path legacy = temp.resolve("snowytrees.json"), current = temp.resolve("frostedfoliage.json");
-        String original = "{\"snowDepth\":0.31,\"plantSnowDepth\":0.72,\"plantsEnabled\":false,\"accumulationSeconds\":16}";
-        Files.writeString(legacy, original);
-        var store = new ConfigStore(current, legacy);
-        var migrated = store.load();
-        assertEquals(0.31, migrated.snowDepth()); assertEquals(0.72, migrated.plantSnowDepth());
-        assertFalse(migrated.plantsEnabled()); assertEquals(16, migrated.accumulationSeconds());
-        assertEquals(original, Files.readString(legacy)); assertTrue(Files.exists(current));
-        store.save(migrated.withSnowDepth(0.83));
-        assertEquals(0.83, store.load().snowDepth());
-        assertEquals(original, Files.readString(legacy));
-    }
-    @Test void renameDoesNotReplaceMalformedLegacySettingsWithDefaults() throws Exception {
-        Path legacy = temp.resolve("snowytrees.json"), current = temp.resolve("frostedfoliage.json");
-        Files.writeString(legacy, "{broken");
-        var store = new ConfigStore(current, legacy);
-        assertThrows(IOException.class, store::load);
-        assertThrows(IOException.class, () -> store.save(SnowConfig.defaults()));
-        assertEquals("{broken", Files.readString(legacy)); assertFalse(Files.exists(current));
-    }
     @Test void plantSettingsPersistClampAndRemainIndependentOfLeaves() throws Exception {
         var store = new ConfigStore(temp.resolve("plants.json"));
         var config = SnowConfig.defaults().withPlants(false, 0.35, 0.72).withSnowDepth(0.9);

@@ -12,10 +12,8 @@ import java.nio.file.StandardCopyOption;
 public final class ConfigStore {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private final Path file;
-    private final Path legacyFile;
     private IOException loadFailure;
-    public ConfigStore(Path file) { this(file, null); }
-    public ConfigStore(Path file, Path legacyFile) { this.file = file; this.legacyFile = legacyFile; }
+    public ConfigStore(Path file) { this.file = file; }
 
     public SnowConfig load() throws IOException {
         loadFailure = null;
@@ -27,11 +25,6 @@ public final class ConfigStore {
 
     private SnowConfig read() throws IOException {
         if (!Files.exists(file)) {
-            if (legacyFile != null && Files.exists(legacyFile)) {
-                SnowConfig migrated = new ConfigStore(legacyFile).load();
-                save(migrated);
-                return migrated;
-            }
             SnowConfig defaults = SnowConfig.defaults();
             save(defaults);
             return defaults;
