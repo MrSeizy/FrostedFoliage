@@ -1,5 +1,6 @@
 package dev.frostedfoliage.client.world;
 
+import dev.frostedfoliage.config.ConfigDiff;
 import dev.frostedfoliage.config.SnowConfig;
 import dev.frostedfoliage.core.BoundedSectionStore;
 import dev.frostedfoliage.core.SectionScheduler;
@@ -46,22 +47,16 @@ public final class SnowSystem {
         SnowConfig previous = config;
         if (next.equals(previous)) return;
         config = next;
-        boolean rules = previous.moddedFoliage() != next.moddedFoliage() || previous.plantsEnabled() != next.plantsEnabled()
-                || !previous.includeBlocks().equals(next.includeBlocks()) || !previous.excludeBlocks().equals(next.excludeBlocks());
-        if (rules) foliage.refresh(next, world != null);
+        var diff = new ConfigDiff(previous, next);
+        if (diff.foliageRules()) foliage.refresh(next, world != null);
         ground.configure(next);
-        if (rules || previous.skyExposureSensitivity() != next.skyExposureSensitivity()) {
+        if (diff.exposure()) {
             // Keep old snapshots usable until each environment has been recaptured.
             scheduler.recaptureAll();
             scanCursor = 0;
         }
-        if (rules || previous.enabled() != next.enabled() || previous.maximumCoverage() != next.maximumCoverage()
-                || previous.plantMaximumCoverage() != next.plantMaximumCoverage() || previous.whiteness() != next.whiteness()
-                || previous.variation() != next.variation() || previous.preferTopFaces() != next.preferTopFaces()
-                || previous.snowDepth() != next.snowDepth() || previous.plantSnowDepth() != next.plantSnowDepth()) {
-            scheduler.rebuildAll();
-        }
-        if (previous.maxCachedSections() != next.maxCachedSections()) {
+        if (diff.appearance()) scheduler.rebuildAll();
+        if (diff.cacheSize()) {
             updateFocus(Minecraft.getInstance());
             scheduler.resize(next.maxCachedSections(), snapshots::remove);
             scanCursor = 0;

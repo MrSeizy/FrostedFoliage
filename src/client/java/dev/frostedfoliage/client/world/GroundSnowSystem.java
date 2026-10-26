@@ -1,5 +1,6 @@
 package dev.frostedfoliage.client.world;
 
+import dev.frostedfoliage.config.ConfigDiff;
 import dev.frostedfoliage.config.SnowConfig;
 import dev.frostedfoliage.core.BoundedSectionStore;
 import dev.frostedfoliage.core.SectionScheduler;
@@ -77,11 +78,10 @@ public final class GroundSnowSystem {
     }
 
     void configure(SnowConfig next) {
-        SnowConfig before = config; config = next;
-        if (before.enabled() != next.enabled() || before.treeGroundSnow() != next.treeGroundSnow()
-                || before.plantGroundSnow() != next.plantGroundSnow() || before.moddedFoliage() != next.moddedFoliage()
-                || !before.includeBlocks().equals(next.includeBlocks()) || !before.excludeBlocks().equals(next.excludeBlocks())) invalidateAll();
-        if (before.maxCachedSections() != next.maxCachedSections()) { scheduler.resize(limit(), this::remove); cursor = 0; }
+        var diff = new ConfigDiff(config, next);
+        config = next;
+        if (diff.groundSnow()) invalidateAll();
+        if (diff.cacheSize()) { scheduler.resize(limit(), this::remove); cursor = 0; }
     }
 
     void invalidateAll() {
