@@ -109,7 +109,7 @@ Install JDK 25 and use the included Gradle wrapper:
 ./gradlew build
 ```
 
-The mod JAR is written to `build/libs/frostedfoliage-0.1.0.jar`. To launch a development client:
+The mod JAR is written to `build/libs/frostedfoliage-0.2.0.jar`. To launch a development client:
 
 ```sh
 ./gradlew runClient
