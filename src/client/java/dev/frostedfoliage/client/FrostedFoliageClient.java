@@ -4,6 +4,7 @@ import net.fabricmc.api.ClientModInitializer;
 import dev.frostedfoliage.client.render.SnowModels;
 import dev.frostedfoliage.client.render.SnowSpriteSource;
 import dev.frostedfoliage.client.world.SnowSystem;
+import dev.frostedfoliage.config.ConfigDiff;
 import dev.frostedfoliage.config.ConfigStore;
 import dev.frostedfoliage.config.SnowConfig;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientChunkEvents;
@@ -29,13 +30,9 @@ public final class FrostedFoliageClient implements ClientModInitializer {
 
     /** Apply on the client thread; refresh generated depth masks only when their inputs change. */
     public static java.util.concurrent.CompletableFuture<Void> applyConfig(SnowConfig config) {
-        SnowConfig previous = system.config();
+        var diff = new ConfigDiff(system.config(), config);
         system.configure(config);
-        boolean foliageRulesChanged = previous.moddedFoliage() != config.moddedFoliage()
-                || !previous.includeBlocks().equals(config.includeBlocks()) || !previous.excludeBlocks().equals(config.excludeBlocks());
-        if (previous.snowDepth() != config.snowDepth() || previous.plantSnowDepth() != config.plantSnowDepth()
-                || previous.plantsEnabled() != config.plantsEnabled() || !previous.extraTextures().equals(config.extraTextures())
-                || (foliageRulesChanged && SnowSpriteSource.needsFoliageReload())) {
+        if (diff.textures() || (diff.blockRules() && SnowSpriteSource.needsFoliageReload())) {
             return net.minecraft.client.Minecraft.getInstance().reloadResourcePacks();
         }
         return java.util.concurrent.CompletableFuture.completedFuture(null);
