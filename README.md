@@ -115,3 +115,13 @@ The mod JAR is written to `build/libs/frostedfoliage-0.1.0.jar`. To launch a dev
 ```
 
 On Windows, use `gradlew.bat` in place of `./gradlew`.
+
+### Testing in a launcher
+
+`./gradlew clientTestJar` builds a separate test mod in `build/testmods/`. To run the client game tests against the release jar, use a disposable launcher instance. The tests create worlds and change video settings.
+
+1. Put the mod jar, the test mod, and Fabric's `fabric-client-gametest-api-v1` jar in the instance's `mods` folder. The Fabric API download does not include that module.
+2. Add `-Dfabric.client.gametest` to the instance's Java arguments.
+3. Choose scenarios in `config/frostedfoliage-test.properties`, for example `ground=true`. The names match the `frostedfoliage.test.*` flags set in `build.gradle`. This file is easier to change than Java arguments, which some launchers cache.
+
+Never give the test mod to players.

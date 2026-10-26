@@ -28,8 +28,9 @@ public final class PlantSnowTest {
             c.options.renderDistance().set(10);
             c.options.pauseOnLostFocus = false;
             c.options.inactivityFpsLimit().set(net.minecraft.client.InactivityFpsLimit.MINIMIZED);
-            FrostedFoliageClient.system().configure(config(false, 0));
         });
+        // applyConfig, not configure: a launcher instance may start with other depths, and masks must match the test's.
+        apply(context, config(false, 0));
         try (var world = context.worldBuilder().adjustSettings(s -> s.setName("Frosted Foliage - Winter Plants")).create()) {
             var server = world.getServer();
             server.runCommand("gamemode spectator @a");

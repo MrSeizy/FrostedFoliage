@@ -11,6 +11,7 @@ import net.minecraft.core.BlockPos;
 public final class FrostedFoliageGameTest implements FabricClientGameTest {
     private static final BlockPos TOP = new BlockPos(0, 70, 0);
     @Override public void runTest(ClientGameTestContext context) {
+        loadLauncherFlags();
         if (Boolean.getBoolean("frostedfoliage.test.gallery") || Boolean.getBoolean("frostedfoliage.test.capture")) {
             new NaturalGalleryCapture().run(context); return;
         }
@@ -38,6 +39,24 @@ public final class FrostedFoliageGameTest implements FabricClientGameTest {
             context.runOnClient(c -> c.gui.setScreen(dev.frostedfoliage.client.compat.SnowConfigScreen.create(null)));
             context.waitTicks(5);
             capture(context, "configuration-screen");
+            for (String tab : new String[]{"trees", "plants", "weather", "advanced"}) {
+                // Cloth has no API to select a tab, so click its button like a player would.
+                double[] cursor = context.computeOnClient(c -> {
+                    String label = net.minecraft.client.resources.language.I18n.get("frostedfoliage.config.category." + tab);
+                    double sx = (double) c.getWindow().getScreenWidth() / c.getWindow().getGuiScaledWidth();
+                    double sy = (double) c.getWindow().getScreenHeight() / c.getWindow().getGuiScaledHeight();
+                    for (var child : c.gui.screen().children()) {
+                        if (child instanceof net.minecraft.client.gui.components.AbstractWidget w && w.getMessage().getString().equals(label)) {
+                            return new double[]{(w.getX() + w.getWidth() / 2.0) * sx, (w.getY() + w.getHeight() / 2.0) * sy};
+                        }
+                    }
+                    throw new AssertionError("Settings tab not found: " + label);
+                });
+                context.getInput().setCursorPos(cursor[0], cursor[1]);
+                context.getInput().pressMouse(com.mojang.blaze3d.platform.InputConstants.MOUSE_BUTTON_LEFT);
+                context.waitTicks(5);
+                capture(context, "configuration-" + tab);
+            }
             context.runOnClient(c -> c.gui.setScreen(null));
         }
         context.runOnClient(client -> {
@@ -139,6 +158,19 @@ public final class FrostedFoliageGameTest implements FabricClientGameTest {
         try (var second = context.worldBuilder().create()) {
             check(context.computeOnClient(c -> !FrostedFoliageClient.system().active()), "Second world inherited weather history");
         }
+    }
+    /**
+     * Launchers such as Prism cache an instance's JVM arguments, so scenario flags can also come from
+     * config/frostedfoliage-test.properties (for example {@code ground=true}). Entries there override -D flags.
+     */
+    private static void loadLauncherFlags() {
+        var file = net.fabricmc.loader.api.FabricLoader.getInstance().getConfigDir().resolve("frostedfoliage-test.properties");
+        if (!java.nio.file.Files.isRegularFile(file)) return;
+        var flags = new java.util.Properties();
+        try (var reader = java.nio.file.Files.newBufferedReader(file)) { flags.load(reader); }
+        catch (java.io.IOException e) { throw new java.io.UncheckedIOException(e); }
+        flags.forEach((key, value) -> System.setProperty("frostedfoliage.test." + key, value.toString().strip()));
+        FrostedFoliageClient.LOGGER.info("Game test flags from {}: {}", file.getFileName(), flags);
     }
     private static void capture(ClientGameTestContext context, String name) {
         context.takeScreenshot(TestScreenshotOptions.of(name).withSize(1280, 800));
