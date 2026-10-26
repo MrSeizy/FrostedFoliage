@@ -5,12 +5,15 @@ import dev.frostedfoliage.config.SnowConfig;
 import dev.frostedfoliage.core.BoundedSectionStore;
 import dev.frostedfoliage.core.ChunkRing;
 import dev.frostedfoliage.core.GroundSnowMath;
+import dev.frostedfoliage.core.RetryBackoff;
 import dev.frostedfoliage.core.SectionScheduler;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.IntStream;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.BlockPos;
@@ -25,7 +28,7 @@ import net.minecraft.world.level.levelgen.Heightmap;
 
 /** Main-thread terrain capture; chunk workers read immutable column results only. */
 public final class GroundSnowSystem {
-    private static final int RADIUS = GroundSnowMath.RADIUS, MAX_CHUNKS = 4096;
+    private static final int RADIUS = GroundSnowMath.RADIUS, MAX_CHUNKS = 4096, RETRY_TICKS = 20;
     private final Foliage foliage;
     private volatile SnowConfig config;
     private ClientLevel world;
@@ -34,14 +37,24 @@ public final class GroundSnowSystem {
     private final SectionScheduler scheduler = new SectionScheduler(2 * MAX_CHUNKS);
     private final ChunkRing ring = new ChunkRing();
     private final Map<Long, Set<Integer>> dirtySections = new HashMap<>();
+    // Written by chunk meshing workers: the capture each section's ground blocks were last meshed from.
+    private final Map<Long, MeshState> meshed = new ConcurrentHashMap<>();
+    private final RetryBackoff retries = new RetryBackoff(RETRY_TICKS, 5);
+    private volatile int look;
     // Block updates arrive on the client thread only, so one scratch position serves them all.
     private final BlockPos.MutableBlockPos scratch = new BlockPos.MutableBlockPos();
     private int focusX, focusZ;
     private boolean focused, rescan;
     private Long rebuilding;
     private long captures, captureNanos, rebuilds;
-    private record Cover(int[] heights, byte[] layers, byte[] kinds, boolean candidates) {
-        boolean any() { for (byte n : layers) if (n != 0) return true; return false; }
+    private int ticks, stale;
+    private record MeshState(Cover cover, int look) { }
+    private record Cover(int[] heights, byte[] layers, byte[] kinds, boolean candidates, int[] snowSections) {
+        Cover(int[] heights, byte[] layers, byte[] kinds, boolean candidates) {
+            this(heights, layers, kinds, candidates, IntStream.range(0, 256).filter(i -> layers[i] != 0).map(i -> heights[i] >> 4).distinct().toArray());
+        }
+        boolean any() { return snowSections.length > 0; }
+        boolean snowIn(int sectionY) { for (int y : snowSections) if (y == sectionY) return true; return false; }
         boolean same(Cover other) {
             return other != null && Arrays.equals(heights, other.heights) && Arrays.equals(layers, other.layers)
                     && Arrays.equals(kinds, other.kinds);
@@ -51,27 +64,46 @@ public final class GroundSnowSystem {
     GroundSnowSystem(SnowConfig config, Foliage foliage) { this.config = config; this.foliage = foliage; }
     private static long key(int x, int z) { return SectionPos.asLong(x, 0, z); }
     private int limit() { return Math.max(16, Math.min(MAX_CHUNKS, config.maxCachedSections() / 4)); }
-    private boolean enabled() { return config.enabled() && (config.treeGroundSnow() || config.plantGroundSnow()); }
+    private boolean enabled() { return enabled(config); }
+    private static boolean enabled(SnowConfig config) { return config.enabled() && (config.treeGroundSnow() || config.plantGroundSnow()); }
 
     public int layers(BlockPos ground) {
         if (!enabled()) return 0;
         Cover cover = snapshots.get(key(ground.getX() >> 4, ground.getZ() >> 4));
         if (cover == null) return 0;
         int i = (ground.getZ() & 15) * 16 + (ground.getX() & 15);
+        return cover.heights[i] == ground.getY() ? layers(cover, config, i) : 0;
+    }
+
+    /** Layers for chunk meshing, which also records which capture the ground block's section is built from. */
+    public int meshLayers(BlockPos ground) {
+        // Read the generation before the config it describes, so a racing change looks stale rather than current.
+        int look = this.look;
+        Cover cover = snapshots.get(key(ground.getX() >> 4, ground.getZ() >> 4));
+        SnowConfig c = config;
+        if (cover == null) return 0;
+        int i = (ground.getZ() & 15) * 16 + (ground.getX() & 15);
         if (cover.heights[i] != ground.getY()) return 0;
+        long section = SectionPos.asLong(ground);
+        MeshState seen = meshed.get(section);
+        if (seen == null || seen.cover() != cover || seen.look() != look) meshed.put(section, new MeshState(cover, look));
+        return enabled(c) ? layers(cover, c, i) : 0;
+    }
+
+    private static int layers(Cover cover, SnowConfig config, int i) {
         return (cover.kinds[i] == 1 ? config.plantGroundSnow() : config.treeGroundSnow()) ? cover.layers[i] : 0;
     }
 
     void reset(ClientLevel level) {
-        world = level; scheduler.clear(); snapshots.clear(); dirtySections.clear();
-        ring.restart(); focused = rescan = false; captures = captureNanos = rebuilds = 0;
+        world = level; scheduler.clear(); snapshots.clear(); dirtySections.clear(); meshed.clear(); retries.clear();
+        ring.restart(); focused = rescan = false; captures = captureNanos = rebuilds = 0; stale = 0;
         rebuilding = null;
     }
 
     void configure(SnowConfig next) {
         var diff = new ConfigDiff(config, next);
         config = next;
-        if (diff.groundSnow()) invalidateAll();
+        if (diff.groundSnow()) { look++; invalidateAll(); }
         if (diff.cacheSize()) { scheduler.resize(limit(), this::remove); ring.restart(); }
     }
 
@@ -158,11 +190,12 @@ public final class GroundSnowSystem {
                 if (chunk == null) { scheduler.unload(key); snapshots.remove(key); dirtySections.remove(key); rescan = true; continue; }
                 long start = System.nanoTime(); Cover old = snapshots.get(key), next = capture(chunk);
                 boolean changed = !next.same(old) && (next.any() || old != null && old.any());
-                if (changed) { if (old != null) mark(key, old); mark(key, next); }
+                if (changed) { if (old != null) mark(key, old); mark(key, next); retrySettled(key); }
                 snapshots.put(key, next, limit()); scheduler.captured(key, next.any(), changed);
                 captures++; captureNanos += System.nanoTime() - start;
             }
         }
+        if (++ticks % RETRY_TICKS == 0) retryLostRebuilds();
         for (int i = 0; i < config.rebuildsPerTick(); i++) {
             if (rebuilding == null) rebuilding = scheduler.nextRebuild();
             if (rebuilding == null) break;
@@ -175,6 +208,41 @@ public final class GroundSnowSystem {
             }
             dirtySections.remove(key); rebuilding = null;
         }
+    }
+
+    /**
+     * A renderer can drop a rebuild request (see SnowSystem), leaving a section with outdated ground snow. Request again
+     * until its ground blocks are meshed from the current capture, backing off for sections the renderer is deferring.
+     */
+    private void retryLostRebuilds() {
+        int look = this.look;
+        stale = 0;
+        // Sections that may show ground snow: those with snow in the current capture or in the one they were meshed from.
+        Set<Long> sections = new HashSet<>();
+        for (long key : scheduler.retainedKeys()) {
+            Cover cover = snapshots.get(key);
+            if (cover != null) for (int y : cover.snowSections()) sections.add(SectionPos.asLong(SectionPos.x(key), y, SectionPos.z(key)));
+        }
+        meshed.forEach((section, seen) -> { if (seen.cover().any()) sections.add(section); });
+        for (long section : sections) {
+            long key = key(SectionPos.x(section), SectionPos.z(section));
+            Cover cover = snapshots.get(key);
+            MeshState seen = meshed.get(section);
+            int y = SectionPos.y(section);
+            boolean current = cover == null || (seen == null ? !cover.snowIn(y)
+                    : (seen.cover() == cover && seen.look() == look) || (!cover.snowIn(y) && !seen.cover().snowIn(y)));
+            if (current) { retries.settled(section); continue; }
+            stale++;
+            if (retries.due(section, ticks)) { dirtySections.computeIfAbsent(key, unused -> new HashSet<>()).add(y); scheduler.rebuild(key); }
+        }
+        // Workers can record a section just after its chunk unloads.
+        meshed.keySet().removeIf(section -> snapshots.get(key(SectionPos.x(section), SectionPos.z(section))) == null);
+        retries.removeIf(section -> snapshots.get(key(SectionPos.x(section), SectionPos.z(section))) == null);
+    }
+
+    /** A new capture brings its own rebuild request, so its sections start their retries over. */
+    private void retrySettled(long key) {
+        retries.removeIf(section -> SectionPos.x(section) == SectionPos.x(key) && SectionPos.z(section) == SectionPos.z(key));
     }
 
     private int groundHeight(LevelChunk chunk, int x, int z, BlockPos.MutableBlockPos pos) {
@@ -233,6 +301,6 @@ public final class GroundSnowSystem {
     public String diagnostics() {
         return "groundChunks=" + snapshots.size() + " groundPending=" + scheduler.pendingCaptures() + "/" + scheduler.pendingRebuilds()
                 + " groundInFlight=" + (rebuilding == null ? 0 : 1)
-                + " groundCaptures=" + captures + " groundRebuilds=" + rebuilds + " groundCaptureMs=" + captureNanos / 1e6;
+                + " groundCaptures=" + captures + " groundRebuilds=" + rebuilds + " groundStale=" + stale + " groundCaptureMs=" + captureNanos / 1e6;
     }
 }

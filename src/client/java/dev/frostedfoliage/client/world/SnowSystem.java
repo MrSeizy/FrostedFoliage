@@ -4,9 +4,12 @@ import dev.frostedfoliage.config.ConfigDiff;
 import dev.frostedfoliage.config.SnowConfig;
 import dev.frostedfoliage.core.BoundedSectionStore;
 import dev.frostedfoliage.core.ChunkRing;
+import dev.frostedfoliage.core.RetryBackoff;
 import dev.frostedfoliage.core.SectionScheduler;
 import dev.frostedfoliage.core.SnowMath;
 import java.util.Locale;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.BlockPos;
@@ -22,16 +25,22 @@ public final class SnowSystem {
     private final BoundedSectionStore<SectionSnow> snapshots = new BoundedSectionStore<>();
     private final SectionScheduler scheduler = new SectionScheduler(2 * SnowConfig.MAX_CACHED_SECTIONS);
     private final ChunkRing ring = new ChunkRing();
+    // Written by chunk meshing workers: what each section's mesh was last built from.
+    private final Map<Long, MeshState> meshed = new ConcurrentHashMap<>();
     private volatile SnowConfig config;
     private volatile Progress progress = new Progress(0, 0);
+    private volatile int appearance;
     private ClientLevel world;
     private double mild, freezing, drySeconds;
-    private int ticks, lastSignature = -1;
+    private int ticks, lastSignature = -1, stale;
     private long captures, rebuilds, captureNanos, tickNanos;
     private int focusX, focusY, focusZ;
     private boolean focused, preview, progressStale;
+    private static final int RETRY_TICKS = 20;
+    private final RetryBackoff retries = new RetryBackoff(RETRY_TICKS, 5);
 
     public record Progress(double mild, double freezing) { }
+    private record MeshState(SectionSnow snapshot, Progress progress, int appearance) { }
     public SnowSystem(SnowConfig config) { this.config = config; foliage.refresh(config, false); ground = new GroundSnowSystem(config, foliage); }
     public SnowConfig config() { return config; }
     public Foliage foliage() { return foliage; }
@@ -58,7 +67,7 @@ public final class SnowSystem {
             scheduler.recaptureAll();
             ring.restart();
         }
-        if (diff.appearance()) scheduler.rebuildAll();
+        if (diff.appearance()) { appearance++; scheduler.rebuildAll(); }
         if (diff.cacheSize()) {
             updateFocus(Minecraft.getInstance());
             scheduler.resize(next.maxCachedSections(), snapshots::remove);
@@ -76,11 +85,11 @@ public final class SnowSystem {
 
     public void reset(ClientLevel next) {
         world = next;
-        scheduler.clear(); snapshots.clear();
+        scheduler.clear(); snapshots.clear(); meshed.clear(); retries.clear();
         focused = false; ring.restart();
         mild = freezing = drySeconds = 0;
         progress = new Progress(0, 0);
-        ticks = 0; lastSignature = -1;
+        ticks = 0; lastSignature = -1; stale = 0;
         captures = rebuilds = captureNanos = tickNanos = 0;
         if (next == null) preview = false;
         foliage.refresh(config, next != null);
@@ -191,6 +200,7 @@ public final class SnowSystem {
             if (signature != lastSignature) {
                 progress = new Progress(mildStage / 16.0, frozenStage / 16.0);
                 lastSignature = signature;
+                retries.clear();
                 for (long key : scheduler.retainedKeys()) {
                     SectionSnow data = snapshots.get(key);
                     if (data != null && data.hasSnow()) scheduler.rebuild(key);
@@ -212,8 +222,10 @@ public final class SnowSystem {
             boolean changed = !data.sameEnvironment(snapshots.get(key));
             snapshots.put(key, data, config.maxCachedSections());
             captures++; captureNanos += System.nanoTime() - captureStart;
+            if (changed) retries.settled(key);
             scheduler.captured(key, data.hasSnow(), changed);
         }
+        if (ticks % RETRY_TICKS == 0) retryLostRebuilds();
         for (int i = 0; i < config.rebuildsPerTick(); i++) {
             Long key = scheduler.nextRebuild();
             if (key == null) break;
@@ -230,21 +242,65 @@ public final class SnowSystem {
     }
 
     public double coverage(BlockPos pos, boolean plant) {
-        if (!active()) return 0;
-        SectionSnow snapshot = snapshots.get(SectionPos.asLong(pos));
-        if (snapshot == null) return 0;
-        int sample = snapshot.sample(pos);
+        return coverage(snapshots.get(SectionPos.asLong(pos)), progress, config, pos, plant);
+    }
+
+    /** Coverage for chunk meshing, which also records what the section's mesh is being built from. */
+    public double meshCoverage(BlockPos pos, boolean plant) {
+        long key = SectionPos.asLong(pos);
+        // Read the generation before the config it describes, so a racing change looks stale rather than current.
+        int look = appearance;
+        SectionSnow snapshot = snapshots.get(key);
         Progress p = progress;
+        SnowConfig c = config;
+        if (snapshot != null) {
+            MeshState seen = meshed.get(key);
+            if (seen == null || seen.snapshot() != snapshot || seen.progress() != p || seen.appearance() != look) {
+                meshed.put(key, new MeshState(snapshot, p, look));
+            }
+        }
+        return coverage(snapshot, p, c, pos, plant);
+    }
+
+    private static double coverage(SectionSnow snapshot, Progress p, SnowConfig config, BlockPos pos, boolean plant) {
+        if (snapshot == null || !config.enabled() || Math.max(p.mild, p.freezing) <= 0) return 0;
+        int sample = snapshot.sample(pos);
         double weather = (sample & 128) != 0 ? p.freezing : p.mild;
         double variation = 1 - config.variation() * (1 - weather) * SnowMath.noise(pos.getX(), pos.getY(), pos.getZ());
         double maximum = plant ? config.plantMaximumCoverage() : config.maximumCoverage();
         return SnowMath.coverage(weather, (sample & 127) / 127.0) * variation * maximum;
     }
 
+    /**
+     * A renderer can drop a rebuild request: Sodium ignores one while the section's first mesh is still being built, so
+     * snow captured in that window never reaches it. Request again until a mesh is built from the current snow, backing
+     * off for sections the renderer is only deferring, such as those out of view.
+     */
+    private void retryLostRebuilds() {
+        Progress p = progress;
+        int look = appearance;
+        stale = 0;
+        for (long key : scheduler.retainedKeys()) {
+            SectionSnow data = snapshots.get(key);
+            if (data == null || current(meshed.get(key), data, p, look)) { retries.settled(key); continue; }
+            stale++;
+            if (retries.due(key, ticks)) scheduler.rebuild(key);
+        }
+        // Workers can record a section just after it unloads.
+        meshed.keySet().removeIf(key -> snapshots.get(key) == null);
+        retries.removeIf(key -> snapshots.get(key) == null);
+    }
+
+    private static boolean current(MeshState seen, SectionSnow data, Progress p, int look) {
+        // Without eligible foliage the mesh never shows snow, unless it was built from an older, snowy capture.
+        if (!data.hasSnow()) return seen == null || seen.snapshot() == data || !seen.snapshot().hasSnow();
+        return seen != null && seen.snapshot() == data && seen.progress() == p && seen.appearance() == look;
+    }
+
     public String diagnostics() {
         return String.format(Locale.ROOT,
-                "coverage=%.3f/%.3f preview=%b sections=%d snapshots=%d pending=%d/%d cleanup=%d evictions=%d captures=%d rebuilds=%d captureMs=%.3f tickUs=%.3f snapshotBytes<=%d",
-                mild, freezing, preview, scheduler.size(), snapshots.size(), scheduler.pendingCaptures(), scheduler.pendingRebuilds(), scheduler.pendingCleanup(), scheduler.evictions(), captures, rebuilds,
+                "coverage=%.3f/%.3f preview=%b sections=%d snapshots=%d pending=%d/%d cleanup=%d evictions=%d captures=%d rebuilds=%d stale=%d captureMs=%.3f tickUs=%.3f snapshotBytes<=%d",
+                mild, freezing, preview, scheduler.size(), snapshots.size(), scheduler.pendingCaptures(), scheduler.pendingRebuilds(), scheduler.pendingCleanup(), scheduler.evictions(), captures, rebuilds, stale,
                 captures == 0 ? 0 : captureNanos / 1e6 / captures, ticks == 0 ? 0 : tickNanos / 1e3 / ticks, snapshots.size() * 4096L)
                 + " " + ground.diagnostics();
     }
