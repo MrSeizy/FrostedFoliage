@@ -68,6 +68,12 @@ public final class FrostedFoliageClient implements ClientModInitializer {
                     String status = system.diagnostics();
                     ctx.getSource().sendFeedback(Component.literal(status)); LOGGER.info(status); return 1;
                 }))
+                .then(literal("preview").executes(ctx -> {
+                    boolean on = !system.preview();
+                    system.setPreview(on);
+                    String key = !on ? "off" : system.config().enabled() ? "on" : "disabled";
+                    ctx.getSource().sendFeedback(Component.translatable("frostedfoliage.command.preview." + key)); return 1;
+                }))
                 .then(literal("reload").executes(ctx -> {
                     try { applyConfig(store.load()); ctx.getSource().sendFeedback(Component.translatable("frostedfoliage.command.reload")); return 1; }
                     catch (IOException e) { ctx.getSource().sendError(Component.literal(e.getMessage())); return 0; }

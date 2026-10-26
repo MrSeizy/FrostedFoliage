@@ -29,7 +29,7 @@ public final class SnowSystem {
     private int ticks, lastSignature = -1;
     private long captures, rebuilds, captureNanos, tickNanos;
     private int focusX, focusY, focusZ;
-    private boolean focused;
+    private boolean focused, preview, progressStale;
 
     public record Progress(double mild, double freezing) { }
     public SnowSystem(SnowConfig config) { this.config = config; foliage.refresh(config, false); ground = new GroundSnowSystem(config, foliage); }
@@ -37,6 +37,14 @@ public final class SnowSystem {
     public Foliage foliage() { return foliage; }
     public GroundSnowSystem ground() { return ground; }
     public boolean active() { Progress p = progress; return config.enabled() && Math.max(p.mild, p.freezing) > 0; }
+    public boolean preview() { return preview; }
+
+    /** Shows full snow wherever it can fall, leaving the weather simulation underneath untouched. Cleared on disconnect. */
+    public void setPreview(boolean enabled) {
+        if (preview == enabled) return;
+        preview = enabled;
+        progressStale = true;
+    }
 
     public void configure(SnowConfig next) {
         SnowConfig previous = config;
@@ -74,6 +82,7 @@ public final class SnowSystem {
         progress = new Progress(0, 0);
         ticks = 0; lastSignature = -1;
         captures = rebuilds = captureNanos = tickNanos = 0;
+        if (next == null) preview = false;
         foliage.refresh(config, next != null);
         ground.reset(next);
     }
@@ -174,8 +183,10 @@ public final class SnowSystem {
         mild = SnowMath.advance(mild, rain, 0.05, drySeconds, false, config);
         freezing = SnowMath.advance(freezing, rain, 0.05, drySeconds, true, config);
         int interval = Math.max(10, (int) Math.ceil(20 / config.maxVisualUpdatesPerSecond()));
-        if (ticks % interval == 0) {
-            int mildStage = SnowMath.stage(mild, config.steps()), frozenStage = SnowMath.stage(freezing, config.steps());
+        if (progressStale || ticks % interval == 0) {
+            progressStale = false;
+            int mildStage = preview ? 16 : SnowMath.stage(mild, config.steps());
+            int frozenStage = preview ? 16 : SnowMath.stage(freezing, config.steps());
             int signature = mildStage * 17 + frozenStage;
             if (signature != lastSignature) {
                 progress = new Progress(mildStage / 16.0, frozenStage / 16.0);
@@ -232,8 +243,8 @@ public final class SnowSystem {
 
     public String diagnostics() {
         return String.format(Locale.ROOT,
-                "coverage=%.3f/%.3f sections=%d snapshots=%d pending=%d/%d cleanup=%d evictions=%d captures=%d rebuilds=%d captureMs=%.3f tickUs=%.3f snapshotBytes<=%d",
-                mild, freezing, scheduler.size(), snapshots.size(), scheduler.pendingCaptures(), scheduler.pendingRebuilds(), scheduler.pendingCleanup(), scheduler.evictions(), captures, rebuilds,
+                "coverage=%.3f/%.3f preview=%b sections=%d snapshots=%d pending=%d/%d cleanup=%d evictions=%d captures=%d rebuilds=%d captureMs=%.3f tickUs=%.3f snapshotBytes<=%d",
+                mild, freezing, preview, scheduler.size(), snapshots.size(), scheduler.pendingCaptures(), scheduler.pendingRebuilds(), scheduler.pendingCleanup(), scheduler.evictions(), captures, rebuilds,
                 captures == 0 ? 0 : captureNanos / 1e6 / captures, ticks == 0 ? 0 : tickNanos / 1e3 / ticks, snapshots.size() * 4096L)
                 + " " + ground.diagnostics();
     }

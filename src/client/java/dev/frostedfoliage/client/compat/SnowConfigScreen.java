@@ -96,8 +96,9 @@ public final class SnowConfigScreen {
         var persistence = stepped(entries, "melt_delay", delaySteps, c.persistenceSeconds(), d.persistenceSeconds(),
                 SnowConfigScreen::duration).build();
         var exposure = percent(entries, "canopy_delay", c.skyExposureSensitivity(), d.skyExposureSensitivity(), Note.NONE).build();
+        var stayFrosted = toggle(entries, "stay_frosted", c.freezingBiomesStayFrosted(), d.freezingBiomesStayFrosted(), Note.NONE).build();
         simulation.addEntry(accumulation); simulation.addEntry(accSeconds); simulation.addEntry(melting);
-        simulation.addEntry(meltSeconds); simulation.addEntry(persistence); simulation.addEntry(exposure);
+        simulation.addEntry(meltSeconds); simulation.addEntry(persistence); simulation.addEntry(exposure); simulation.addEntry(stayFrosted);
 
         var modded = toggle(entries, "modded_foliage", c.moddedFoliage(), d.moddedFoliage(), Note.MAY_RELOAD).build();
         var quality = entries.startEnumSelector(Component.translatable(KEY + "quality"), SnowConfig.Quality.class, c.quality())
@@ -126,6 +127,7 @@ public final class SnowConfigScreen {
                     .gradualAccumulation(accumulation.getValue()).accumulationSeconds(buildupSteps[accSeconds.getValue()])
                     .gradualMelting(melting.getValue()).meltingSeconds(meltSteps[meltSeconds.getValue()])
                     .persistenceSeconds(delaySteps[persistence.getValue()]).skyExposureSensitivity(exposure.getValue() / 100d)
+                    .freezingBiomesStayFrosted(stayFrosted.getValue())
                     .moddedFoliage(modded.getValue()).quality(quality.getValue())
                     .maxVisualUpdatesPerSecond(refreshSteps[frequency.getValue()]).maxCachedSections((int) cacheSteps[limit.getValue()])
                     .includeBlocks(include.getValue()).excludeBlocks(exclude.getValue()).extraTextures(textures.getValue()).build();

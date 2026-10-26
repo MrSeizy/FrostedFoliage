@@ -2,6 +2,9 @@
   "modmenu.descriptionTranslation.frostedfoliage": "Gradual, weather-aware snow on foliage. Entirely client-side.",
 
   "frostedfoliage.command.reload": "Frosted Foliage settings reloaded; changed depth/texture masks refresh automatically.",
+  "frostedfoliage.command.preview.on": "Snow preview on: foliage in snowy places shows full snow. Run /frostedfoliage preview again to turn it off.",
+  "frostedfoliage.command.preview.off": "Snow preview off.",
+  "frostedfoliage.command.preview.disabled": "Snow preview on, but snow is turned off in settings, so nothing will show. Run /frostedfoliage preview again to turn it off.",
 
   "frostedfoliage.config.title": "Frosted Foliage",
   "frostedfoliage.config.category.appearance": "Appearance",
@@ -62,6 +65,8 @@
   "frostedfoliage.config.melt_delay.tooltip": "Wait this long after snowfall ends. Doubles in snowy biomes.",
   "frostedfoliage.config.canopy_delay": "Canopy delay",
   "frostedfoliage.config.canopy_delay.tooltip": "Higher values slow snow buildup beneath other leaves.",
+  "frostedfoliage.config.stay_frosted": "Snowy biomes stay frosted",
+  "frostedfoliage.config.stay_frosted.tooltip": "Keep foliage frosted in snowy biomes, such as snowy taiga and snowy plains, even when it isn't snowing.",
 
   "frostedfoliage.config.modded_foliage": "Modded foliage",
   "frostedfoliage.config.modded_foliage.tooltip": "Include leaves and supported plants from other mods.",

@@ -16,6 +16,7 @@ https://github.com/user-attachments/assets/e2ab33a6-5dec-4d90-b7f9-0bff27126a68
 
 - **Gradual snowfall and melting.** Exposed foliage gathers snow first, with slower buildup beneath tree canopies and slower melting in snowy biomes such as snowy plains and snowy taiga.
 - **Separate controls for trees and plants.** Choose how far snow reaches down the foliage and how much of its texture turns white.
+- **Optional year-round frost.** Keep foliage in snowy biomes frosted even between snowfalls.
 - **Snow beneath the canopy.** Fill bare patches under trees and plants when nearby ground already has snow.
 - **Resource pack support.** Snow follows the active foliage textures, including transparent gaps. No extra texture pack is needed.
 - **Entirely visual.** Use it in singleplayer or on servers without installing anything on the server. Blocks, collision, and world saves stay unchanged.
@@ -54,7 +55,7 @@ Settings are grouped into five tabs:
 | Appearance | Enable the effect, adjust snow whiteness, and vary buildup between blocks. |
 | Trees | Set leaf snow depth and coverage, coat tops first, and toggle ground snow beneath trees. |
 | Plants | Enable plant frost, set its depth and coverage, and toggle ground snow beneath plants. |
-| Weather | Adjust buildup time, melting, and the delay beneath canopies. |
+| Weather | Adjust buildup time, melting, and the delay beneath canopies, or keep snowy biomes frosted. |
 | Advanced | Adjust quality and performance, enable modded foliage, or customize which blocks receive snow. |
 
 **Depth** controls how far snow reaches down a leaf block or plant. For leaves, 0% coats only the tops and 100% coats the whole block, including undersides. For plants, 0% turns the coating off and 100% reaches the base.
@@ -66,6 +67,8 @@ Settings are grouped into five tabs:
 *Plant frost at the default 35% depth and 60% coverage.*
 
 Changes apply while playing. Some changes, including snow depth, trigger a brief resource reload; their tooltips say so.
+
+To see your settings without waiting for snowfall, stand in a snowy area and run `/frostedfoliage preview`. Foliage shows full snow until you run the command again or leave the world.
 
 Without the settings screen, edit `config/frostedfoliage.json` in your instance folder and run `/frostedfoliage reload` in chat.
 
@@ -83,7 +86,7 @@ Foliage needs active snowfall in a cold enough location. Rain in warm biomes doe
 
 ### Does it work in an already snowy world?
 
-Ground snow can appear beneath trees and plants as soon as nearby real snow is present. Frost on the foliage itself builds during snowfall; it starts fresh when you join a world or change dimensions.
+Ground snow can appear beneath trees and plants as soon as nearby real snow is present. Frost on the foliage itself builds during snowfall; it starts fresh when you join a world or change dimensions. To keep snowy biomes frosted all the time, turn on **Weather → Snowy biomes stay frosted**.
 
 ### Why are there still bare patches beneath some trees?
 

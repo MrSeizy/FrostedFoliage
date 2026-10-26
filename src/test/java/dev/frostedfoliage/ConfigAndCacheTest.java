@@ -25,12 +25,14 @@ class ConfigAndCacheTest {
         assertEquals(180, d.accumulationSeconds()); assertEquals(240, d.meltingSeconds()); assertEquals(30, d.persistenceSeconds());
         assertEquals(0.8, d.skyExposureSensitivity()); assertEquals(SnowConfig.Quality.MEDIUM, d.quality());
         assertEquals(0.5, d.maxVisualUpdatesPerSecond()); assertEquals(4096, d.maxCachedSections());
-        assertTrue(d.treeGroundSnow() && d.plantGroundSnow());
-        var custom = d.toBuilder().whiteness(0.3).excludeBlocks(java.util.List.of("Fern")).build();
+        assertTrue(d.treeGroundSnow() && d.plantGroundSnow()); assertFalse(d.freezingBiomesStayFrosted());
+        var custom = d.toBuilder().whiteness(0.3).freezingBiomesStayFrosted(true).excludeBlocks(java.util.List.of("Fern")).build();
         assertEquals(custom, custom.toBuilder().build());
         assertEquals(java.util.List.of("minecraft:fern"), custom.excludeBlocks());
         var store = new ConfigStore(temp.resolve("builder.json"));
         store.save(custom); assertEquals(custom, store.load());
+        Files.writeString(temp.resolve("older.json"), "{\"whiteness\":0.4}");
+        assertFalse(new ConfigStore(temp.resolve("older.json")).load().freezingBiomesStayFrosted(), "Older files gain the new option switched off");
     }
     @Test void partialConfigKeepsMeaningfulDefaultsAndClampsValues() throws Exception {
         Path file = temp.resolve("config.json");

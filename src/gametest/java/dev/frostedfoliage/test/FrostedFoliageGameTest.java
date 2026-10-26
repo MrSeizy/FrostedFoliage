@@ -119,6 +119,17 @@ public final class FrostedFoliageGameTest implements FabricClientGameTest {
             world.getConnection().waitForChunksRender(false);
             capture(context, "07-melted");
             check(context.computeOnClient(c -> FrostedFoliageClient.system().coverage(TOP)) == 0, "Snow did not melt");
+            // Preview shows full snow in clear weather and hands back to the simulation when turned off.
+            context.runOnClient(c -> FrostedFoliageClient.system().setPreview(true));
+            context.waitFor(c -> FrostedFoliageClient.system().coverage(TOP) > 0.9, 100);
+            context.runOnClient(c -> FrostedFoliageClient.system().setPreview(false));
+            context.waitFor(c -> FrostedFoliageClient.system().coverage(TOP) == 0, 100);
+            // Snowy taiga counts as a snowy biome, so the opt-in keeps it frosted without snowfall.
+            SnowConfig melted = context.computeOnClient(c -> FrostedFoliageClient.system().config());
+            context.runOnClient(c -> FrostedFoliageClient.system().configure(melted.toBuilder().freezingBiomesStayFrosted(true).build()));
+            context.waitFor(c -> FrostedFoliageClient.system().coverage(TOP) > 0.9, 100);
+            context.runOnClient(c -> FrostedFoliageClient.system().configure(melted));
+            context.waitFor(c -> !FrostedFoliageClient.system().active(), 1200);
             context.runOnClient(c -> FrostedFoliageClient.LOGGER.info("CLIENT TEST METRICS {}", FrostedFoliageClient.system().diagnostics()));
             server.runCommand("execute in minecraft:the_nether run tp @a 0 90 0");
             context.waitTicks(60);
