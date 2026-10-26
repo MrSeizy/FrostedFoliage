@@ -18,6 +18,7 @@ https://github.com/user-attachments/assets/e2ab33a6-5dec-4d90-b7f9-0bff27126a68
 - **Separate controls for trees and plants.** Choose how far snow reaches down the foliage and how much of its texture turns white.
 - **Optional year-round frost.** Keep foliage in snowy biomes frosted even between snowfalls.
 - **Snow beneath the canopy.** Fill bare patches under trees and plants when nearby ground already has snow.
+- **Frosted falling leaves.** As snow builds up, more leaves drift down white, up to a share set by the trees' depth and coverage. At 0% depth, falling leaves keep their colors.
 - **Resource pack support.** Snow follows the active foliage textures, including transparent gaps. No extra texture pack is needed.
 - **Entirely visual.** Use it in singleplayer or on servers without installing anything on the server. Blocks, collision, and world saves stay unchanged.
 

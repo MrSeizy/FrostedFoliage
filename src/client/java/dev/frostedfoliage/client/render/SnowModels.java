@@ -255,7 +255,7 @@ public final class SnowModels {
                 float v = (quad.v(i) - original.getV0()) / (original.getV1() - original.getV0());
                 quad.uv(i, mask.getU(u), mask.getV(v));
             }
-            int shade = (int) (180 + 75 * config.whiteness());
+            int shade = SnowMath.snowTint(config.whiteness());
             int color = 0xff000000 | shade << 16 | shade << 8 | shade;
             quad.color(color, color, color, color);
             quad.tintIndex(-1).chunkLayer(ChunkSectionLayer.CUTOUT).animated(mask.isAnimated()).emissive(false);

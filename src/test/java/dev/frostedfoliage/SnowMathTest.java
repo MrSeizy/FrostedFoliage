@@ -117,4 +117,25 @@ class SnowMathTest {
         assertEquals(SnowMath.snowPixel(0xff888888, 0, 0, 16, 16, 16, 0),
                 SnowMath.snowPixel(0xff888888, 9, 13, 16, 16, 16, 1));
     }
+    @Test void frostedParticlesMatchFullySnowedLeafPixels() {
+        assertEquals(0, SnowMath.frostPixel(0x00ed7d1a));
+        assertEquals(0x7f, SnowMath.frostPixel(0x7fed7d1a) >>> 24);
+        assertEquals(SnowMath.snowPixel(0xffed7d1a, 3, 4, 16, 16, 16, 0), SnowMath.frostPixel(0xffed7d1a));
+        // Orange poplar and dark gray vanilla leaf particles both come out near white.
+        assertTrue((SnowMath.frostPixel(0xffed7d1a) >> 8 & 255) > 200);
+        assertTrue((SnowMath.frostPixel(0xff555555) >> 16 & 255) > 180);
+    }
+    @Test void fallingLeavesFrostOnlyAsDeepAsTheSnowReaches() {
+        assertEquals(0, SnowMath.frostedLeafChance(1, 0));
+        assertEquals(0.5, SnowMath.frostedLeafChance(1, 0.5), 1e-9);
+        assertEquals(0.5, SnowMath.frostedLeafChance(0.5, 1), 1e-9);
+        assertEquals(0.3, SnowMath.frostedLeafChance(0.6, 0.5), 1e-9);
+        assertEquals(0.6, SnowMath.frostedLeafChance(0.6, 1), 1e-9);
+        assertEquals(0, SnowMath.frostedLeafChance(0, 1));
+    }
+    @Test void snowTintFollowsWhiteness() {
+        assertEquals(180, SnowMath.snowTint(0));
+        assertEquals(247, SnowMath.snowTint(0.9));
+        assertEquals(255, SnowMath.snowTint(1));
+    }
 }

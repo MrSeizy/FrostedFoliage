@@ -20,6 +20,7 @@ public final class FrostedFoliageGameTest implements FabricClientGameTest {
         if (Boolean.getBoolean("frostedfoliage.test.textureBudget")) { new ResourceBudgetTest().run(context); return; }
         if (Boolean.getBoolean("frostedfoliage.test.churn")) { new BlockUpdateBenchmark().run(context); return; }
         if (Boolean.getBoolean("frostedfoliage.test.icon")) { new IconCapture().run(context); return; }
+        if (Boolean.getBoolean("frostedfoliage.test.leaves")) { new FallingLeavesTest().run(context); return; }
         if (Boolean.getBoolean("frostedfoliage.test.plants")) {
             new PlantSnowTest().run(context);
             if (!Boolean.getBoolean("frostedfoliage.test.vanillaPlants")) new PlantCatalogTest().run(context);

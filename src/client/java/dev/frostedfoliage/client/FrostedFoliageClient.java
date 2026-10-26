@@ -2,6 +2,7 @@ package dev.frostedfoliage.client;
 
 import net.fabricmc.api.ClientModInitializer;
 import dev.frostedfoliage.client.render.SnowModels;
+import dev.frostedfoliage.client.render.SnowParticleSource;
 import dev.frostedfoliage.client.render.SnowSpriteSource;
 import dev.frostedfoliage.client.world.SnowSystem;
 import dev.frostedfoliage.config.ConfigDiff;
@@ -50,6 +51,7 @@ public final class FrostedFoliageClient implements ClientModInitializer {
         try { config = store.load(); } catch (IOException e) { LOGGER.error("Using defaults; original config retained", e); }
         system = new SnowSystem(config);
         SpriteSourceRegistry.register(Identifier.fromNamespaceAndPath(MOD_ID, "snow_masks"), SnowSpriteSource.CODEC);
+        SpriteSourceRegistry.register(Identifier.fromNamespaceAndPath(MOD_ID, "snow_particles"), SnowParticleSource.CODEC);
         SnowModels.register(system);
         ClientTickEvents.END_CLIENT_TICK.register(system::tick);
         ClientChunkEvents.CHUNK_LOAD.register(system::load);
