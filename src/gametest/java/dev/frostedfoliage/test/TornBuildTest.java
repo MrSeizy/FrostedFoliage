@@ -50,6 +50,7 @@ public final class TornBuildTest {
             server.runCommand("tp @a 2 70 -5 0 10");
             world.getConnection().waitForChunksRender();
             context.waitFor(c -> CANOPY.stream().allMatch(p -> meshedBlocks.getOrDefault(p, -1.0) == 0), 200);
+            settle(context);
 
             // Snow arrives while a worker is halfway through the section and every request is dropped.
             pauseMeshing(context);
@@ -68,6 +69,7 @@ public final class TornBuildTest {
 
             // Snow leaves: the leaves are excluded while a worker is halfway through the snowy section, its snapshot is
             // discarded, and the cleanup request is dropped. The torn mesh keeps snow on the blocks before the pause.
+            settle(context);
             pauseMeshing(context);
             LostRebuildTest.dropRebuilds = true;
             context.runOnClient(c -> FrostedFoliageClient.system().configure(config.toBuilder().excludeBlocks(List.of("minecraft:oak_leaves")).build()));
@@ -85,6 +87,19 @@ public final class TornBuildTest {
         } finally {
             LostRebuildTest.dropRebuilds = false; pauseAt = null; resume.countDown();
         }
+    }
+
+    /**
+     * Waits until no chunk has loaded for 100 ticks. Chunks still streaming in make the renderer rebuild their
+     * neighbours, which would refresh the canopy's acknowledgment on its own and hide what this test checks.
+     */
+    private static void settle(ClientGameTestContext context) {
+        for (int quiet = 0, last = -1; quiet < 100; ) {
+            int loaded = context.computeOnClient(c -> c.level.getChunkSource().getLoadedChunksCount());
+            if (loaded == last) quiet += 20; else { quiet = 0; last = loaded; }
+            context.waitTicks(20);
+        }
+        context.waitFor(c -> FrostedFoliageClient.system().ground().settled(), 1200);
     }
 
     /** Requests a rebuild of the canopy's section and lets the client run until a worker is paused at PAUSE. */

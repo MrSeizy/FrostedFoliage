@@ -1,7 +1,8 @@
 name: Client tests
 
 # Nightly and on demand. Minecraft 26.3's client runs without a display server on the hosted runners (Fabric's own
-# CI does the same): no Xvfb, Mesa software rendering, and the OpenGL backend selected through options.txt.
+# CI does the same): no Xvfb and Mesa software rendering. OpenGL is requested through options.txt, but without an X
+# server the client finds no GLX visual and falls back to the Vulkan backend (lavapipe); the fixtures pass there.
 on:
   schedule:
     - cron: '0 5 * * *'
