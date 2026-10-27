@@ -97,6 +97,11 @@ public final class SnowMath {
         return coverage * depth;
     }
 
+    /** Whether a mask has no transparent texels of its own: only the full, untapered stage. A renderer that draws the overlay in an opaque pass shows every other texel as snow. */
+    public static boolean holeFreeMask(int stage, int edge) {
+        return stage >= 16 && edge == 0;
+    }
+
     /** Untinted vertex shade drawn over snow sprites. */
     public static int snowTint(double whiteness) {
         return (int) (180 + 75 * whiteness);

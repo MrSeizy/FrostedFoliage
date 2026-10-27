@@ -3,6 +3,8 @@ package dev.frostedfoliage.config;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /** Immutable configuration, safe to publish to chunk compilation workers. Defaults live in {@link Builder}. */
 public record SnowConfig(boolean enabled, boolean gradualAccumulation, boolean gradualMelting,
@@ -17,6 +19,8 @@ public record SnowConfig(boolean enabled, boolean gradualAccumulation, boolean g
     public static final double MIN_SECONDS = 1, MAX_SECONDS = 86400;
     public static final double MIN_UPDATES_PER_SECOND = 0.05, MAX_UPDATES_PER_SECOND = 2;
     public static final int MIN_CACHED_SECTIONS = 64, MAX_CACHED_SECTIONS = 16384;
+    public static final int MAX_LIST_ENTRIES = 4096;
+    private static final Logger LOGGER = LoggerFactory.getLogger("frostedfoliage");
 
     public SnowConfig {
         maximumCoverage = clamp(maximumCoverage, 0, 1);
@@ -39,8 +43,10 @@ public record SnowConfig(boolean enabled, boolean gradualAccumulation, boolean g
 
     private static List<String> clean(List<String> list) {
         if (list == null) return List.of();
-        return list.stream().filter(Objects::nonNull).map(SnowConfig::normalizeIdentifier)
-                .distinct().limit(4096).toList();
+        List<String> ids = list.stream().filter(Objects::nonNull).map(SnowConfig::normalizeIdentifier).distinct().toList();
+        if (ids.size() <= MAX_LIST_ENTRIES) return ids;
+        LOGGER.warn("Keeping the first {} of {} block or texture IDs", MAX_LIST_ENTRIES, ids.size());
+        return ids.subList(0, MAX_LIST_ENTRIES);
     }
 
     public static String normalizeIdentifier(String value) {

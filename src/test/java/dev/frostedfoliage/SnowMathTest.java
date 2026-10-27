@@ -133,6 +133,13 @@ class SnowMathTest {
         assertEquals(0.6, SnowMath.frostedLeafChance(0.6, 1), 1e-9);
         assertEquals(0, SnowMath.frostedLeafChance(0, 1));
     }
+    @Test void onlyFullUntaperedMasksAreSafeForAnOpaqueRenderPass() {
+        // A renderer that ignores the cutout layer draws every transparent mask texel as snow.
+        assertTrue(SnowMath.holeFreeMask(16, 0));
+        assertFalse(SnowMath.holeFreeMask(15, 0));
+        assertFalse(SnowMath.holeFreeMask(16, 1));
+        assertFalse(SnowMath.holeFreeMask(0, 0));
+    }
     @Test void snowTintFollowsWhiteness() {
         assertEquals(180, SnowMath.snowTint(0));
         assertEquals(247, SnowMath.snowTint(0.9));

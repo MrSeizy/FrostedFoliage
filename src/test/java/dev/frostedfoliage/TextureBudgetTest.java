@@ -28,6 +28,11 @@ class TextureBudgetTest {
         assertEquals(new TextureBudget.Profile(4, 1), profile);
         assertTrue(sources.stream().mapToLong(s -> s.texels(profile)).sum() <= TextureBudget.MAX_TEXELS);
     }
+    @Test void leafPlantAndParticleSourcesShareOnePixelCap() {
+        assertEquals(65536, TextureBudget.MAX_SOURCE_PIXELS);
+        // One capped leaf source still needs the budget's profile fallback: the cap bounds decoding, not masks.
+        assertTrue(new TextureBudget.Source(TextureBudget.MAX_SOURCE_PIXELS, true, 0).texels(new TextureBudget.Profile(16, 5)) > TextureBudget.MAX_TEXELS);
+    }
     @Test void stageMappingIsMonotonicAndOnlyReferencesGeneratedLevels() {
         for (int stages : new int[]{1, 2, 4, 8, 16}) {
             var profile = new TextureBudget.Profile(stages, 1);

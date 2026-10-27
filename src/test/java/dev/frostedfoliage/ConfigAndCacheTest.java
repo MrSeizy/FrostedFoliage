@@ -130,6 +130,14 @@ class ConfigAndCacheTest {
         assertTrue(FoliageRules.includes("test:bush", false, c));
         assertFalse(FoliageRules.includes("test:excluded", true, c));
     }
+    @Test void oversizedListsKeepTheirFirstEntriesUpToTheCap() throws Exception {
+        var ids = new java.util.ArrayList<String>();
+        for (int i = 0; i < SnowConfig.MAX_LIST_ENTRIES + 5; i++) ids.add("test:block_" + i);
+        var config = SnowConfig.defaults().toBuilder().includeBlocks(ids).build();
+        assertEquals(SnowConfig.MAX_LIST_ENTRIES, config.includeBlocks().size());
+        assertEquals("test:block_0", config.includeBlocks().get(0));
+        assertEquals("test:block_" + (SnowConfig.MAX_LIST_ENTRIES - 1), config.includeBlocks().get(SnowConfig.MAX_LIST_ENTRIES - 1));
+    }
     @Test void cacheAdmissionIsBoundedAndUnloadFreesCapacity() {
         var cache = new BoundedSectionStore<String>();
         assertTrue(cache.put(1, "one", 2)); assertTrue(cache.put(2, "two", 2)); assertFalse(cache.put(3, "three", 2));

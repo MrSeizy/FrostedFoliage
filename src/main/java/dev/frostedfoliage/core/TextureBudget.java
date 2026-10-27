@@ -5,6 +5,8 @@ import java.util.List;
 /** Keep source resolution and spatial patterns; reduce weather steps before dropping textures. */
 public final class TextureBudget {
     public static final long MAX_TEXELS = 8L * 1024 * 1024;
+    /** Largest source image (all animation frames) turned into masks or frosted particle sprites. */
+    public static final int MAX_SOURCE_PIXELS = 65536;
     private TextureBudget() { }
 
     public record Source(long pixels, boolean leaf, int plantShapes) {
