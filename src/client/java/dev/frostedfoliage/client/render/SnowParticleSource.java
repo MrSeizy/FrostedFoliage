@@ -4,6 +4,7 @@ import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.serialization.MapCodec;
 import dev.frostedfoliage.client.FrostedFoliageClient;
 import dev.frostedfoliage.core.SnowMath;
+import dev.frostedfoliage.core.TextureBudget;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -55,6 +56,10 @@ public final class SnowParticleSource implements SpriteSource {
         try (var stream = resource.open()) {
             image = NativeImage.read(stream);
             int width = image.getWidth(), height = image.getHeight();
+            if ((long) width * height > TextureBudget.MAX_SOURCE_PIXELS) {
+                FrostedFoliageClient.LOGGER.warn("Skipping frosted particle sprite {}: larger than {} source pixels", id, TextureBudget.MAX_SOURCE_PIXELS);
+                return null;
+            }
             var animation = resource.metadata().getSection(AnimationMetadataSection.TYPE);
             var texture = resource.metadata().getSection(TextureMetadataSection.TYPE);
             FrameSize frame = animation.map(a -> a.calculateFrameSize(width, height)).orElse(new FrameSize(width, height));

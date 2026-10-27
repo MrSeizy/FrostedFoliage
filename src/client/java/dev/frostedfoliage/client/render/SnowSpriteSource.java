@@ -74,8 +74,8 @@ public final class SnowSpriteSource implements SpriteSource {
             long pixels;
             try (var stream = resource.open(); NativeImage probe = NativeImage.read(stream)) {
                 pixels = (long) probe.getWidth() * probe.getHeight();
-                if (pixels > 65536) {
-                    FrostedFoliageClient.LOGGER.warn("Skipping snow texture {} larger than 65,536 source pixels", original);
+                if (pixels > TextureBudget.MAX_SOURCE_PIXELS) {
+                    FrostedFoliageClient.LOGGER.warn("Skipping snow texture {} larger than {} source pixels", original, TextureBudget.MAX_SOURCE_PIXELS);
                     continue;
                 }
                 if (!uses.isEmpty()) bounds.put(original, visibleBounds(probe, resource));
