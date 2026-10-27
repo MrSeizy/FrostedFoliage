@@ -25,6 +25,13 @@ public final class TornBuildTest {
     private static final BlockPos FIRST = new BlockPos(1, 70, 1), PAUSE = new BlockPos(3, 71, 3);
     private static final List<BlockPos> CANOPY = List.copyOf(BlockPos.betweenClosedStream(1, 70, 1, 3, 71, 3).map(BlockPos::immutable).toList());
 
+    /** Called by the test mixin for every meshed leaf block; logs the two blocks this test watches. */
+    public static void trace(BlockPos pos, double coverage) {
+        if (pos.equals(FIRST) || pos.equals(PAUSE)) {
+            FrostedFoliageClient.LOGGER.info("TORN BUILD meshed {} at {} on {}", pos.toShortString(), coverage, Thread.currentThread().getName());
+        }
+    }
+
     /** Called by the test mixin from the meshing worker; blocks that worker once at the requested position. */
     public static void pauseIfRequested(BlockPos pos) {
         BlockPos at = pauseAt;
@@ -51,6 +58,13 @@ public final class TornBuildTest {
             server.runCommand("tp @a 2 70 -5 0 10");
             world.getConnection().waitForChunksRender();
             context.waitFor(c -> CANOPY.stream().allMatch(p -> meshedBlocks.getOrDefault(p, -1.0) == 0), 200);
+            // Prime the section: snapshots are only captured while snow is active, and the paused job below must
+            // start with a snapshot already acknowledged from the old (bare) state, not with no acknowledgment at all.
+            context.runOnClient(c -> FrostedFoliageClient.system().setPreview(true));
+            await(context, c -> CANOPY.stream().allMatch(p -> meshedBlocks.get(p) > 0.99), 400, "priming snow never reached every block");
+            context.runOnClient(c -> FrostedFoliageClient.system().setPreview(false));
+            await(context, c -> CANOPY.stream().allMatch(p -> meshedBlocks.get(p) == 0), 400, "priming snow never melted from every block");
+            await(context, c -> stale(c) == 0 && unmeshed(c) == 0, 200, "priming left the section unacknowledged");
             settle(context);
 
             // Snow arrives while a worker is halfway through the section and every request is dropped.
@@ -61,8 +75,10 @@ public final class TornBuildTest {
                     && FrostedFoliageClient.system().diagnostics().contains("pending=0/0 "), 400);
             resumeMeshing(context);
             torn(0, 1);
+            // Keep dropping until the mod's own bookkeeping has flagged the torn mesh; the renderer may otherwise
+            // rebuild the section for reasons of its own and hide what is being checked.
+            await(context, c -> stale(c) > 0, 80, "the torn mesh was never found stale");
             LostRebuildTest.dropRebuilds = false;
-            await(context, c -> stale(c) > 0, 60, "the torn mesh was never found stale");
             await(context, c -> CANOPY.stream().allMatch(p -> meshedBlocks.get(p) > 0.99), 400, "snow never reached every block");
             await(context, c -> stale(c) == 0, 200, "retries never settled");
             context.runOnClient(c -> FrostedFoliageClient.LOGGER.info("TORN BUILD recovered: snow reached every block; {}", FrostedFoliageClient.system().diagnostics()));
@@ -77,8 +93,8 @@ public final class TornBuildTest {
                     && FrostedFoliageClient.system().diagnostics().contains("pending=0/0 "), 400);
             resumeMeshing(context);
             torn(1, 0);
+            await(context, c -> stale(c) > 0, 80, "the torn mesh was never found stale");
             LostRebuildTest.dropRebuilds = false;
-            await(context, c -> stale(c) > 0, 60, "the torn mesh was never found stale");
             await(context, c -> CANOPY.stream().allMatch(p -> meshedBlocks.get(p) == 0), 400, "excluded leaves kept their snow");
             await(context, c -> stale(c) == 0, 200, "retries never settled");
             context.runOnClient(c -> FrostedFoliageClient.LOGGER.info("TORN BUILD cleaned: excluded leaves lost their snow; {}", FrostedFoliageClient.system().diagnostics()));
@@ -134,9 +150,11 @@ public final class TornBuildTest {
         throw new AssertionError(failure + ": " + context.computeOnClient(c -> FrostedFoliageClient.system().diagnostics()) + " blocks=" + meshedBlocks);
     }
 
-    private static int stale(net.minecraft.client.Minecraft client) {
-        var match = java.util.regex.Pattern.compile(" stale=(\\d+)").matcher(FrostedFoliageClient.system().diagnostics());
-        if (!match.find()) throw new AssertionError("No stale count");
+    private static int stale(net.minecraft.client.Minecraft client) { return count(" stale="); }
+    private static int unmeshed(net.minecraft.client.Minecraft client) { return count(" unmeshed="); }
+    private static int count(String label) {
+        var match = java.util.regex.Pattern.compile(java.util.regex.Pattern.quote(label) + "(\\d+)").matcher(FrostedFoliageClient.system().diagnostics());
+        if (!match.find()) throw new AssertionError("No" + label + " count");
         return Integer.parseInt(match.group(1));
     }
 

@@ -30,6 +30,7 @@ abstract class SnowModelMeshMixin {
             double coverage = FrostedFoliageClient.system().coverage(pos);
             LostRebuildTest.meshedCoverage.put(SectionPos.asLong(pos), coverage);
             TornBuildTest.meshedBlocks.put(pos.immutable(), coverage);
+            TornBuildTest.trace(pos, coverage);
         }
         if (pos.equals(LostRebuildTest.GROUND)) LostRebuildTest.groundMeshedLayers = FrostedFoliageClient.system().ground().layers(pos);
     }
