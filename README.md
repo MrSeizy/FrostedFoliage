@@ -77,7 +77,7 @@ Without the settings screen, edit `config/frostedfoliage.json` in your instance 
 
 Frosted Foliage supports vanilla leaves, grass, ferns, flowers, bushes, azaleas, and saplings. Many modded leaves and plants are recognized automatically; custom foliage may need the options in **Advanced**. Crops, aquatic plants, fungi, and potted plants are excluded. Waterlogged plants stay clear.
 
-The mod works with Minecraft's standard renderer, Sodium, and Iris. Resource packs and shaders can change the final appearance; packs with custom foliage models or rendering may need additional compatibility work.
+The mod works with Minecraft's standard renderer, Sodium, and Iris. With Sodium and the **Fast** leaves setting, snow appears only on fully covered faces without a depth taper (tops at any depth, all faces at 100% depth), with or without a shader pack; Fancy leaves show the full effect. Resource packs and shaders can change the final appearance; packs with custom foliage models or rendering may need additional compatibility work.
 
 ## Common questions
 
@@ -109,7 +109,7 @@ Install JDK 25 and use the included Gradle wrapper:
 ./gradlew build
 ```
 
-The mod JAR is written to `build/libs/frostedfoliage-0.2.0.jar`. To launch a development client:
+The mod JAR is written to `build/libs/frostedfoliage-0.2.1.jar`. To launch a development client:
 
 ```sh
 ./gradlew runClient
