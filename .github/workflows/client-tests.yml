@@ -1,7 +1,7 @@
 name: Client tests
 
-# Nightly and on demand: the client game tests need a display and a GPU driver, so they run under Xvfb with
-# Mesa's software renderer. Unverified on the hosted runners as of 2026-10-26; expect to tune timeouts.
+# Nightly and on demand. Minecraft 26.3's client runs without a display server on the hosted runners (Fabric's own
+# CI does the same): no Xvfb, Mesa software rendering, and the OpenGL backend selected through options.txt.
 on:
   schedule:
     - cron: '0 5 * * *'
@@ -9,8 +9,8 @@ on:
 
 jobs:
   client:
-    runs-on: ubuntu-latest
-    timeout-minutes: 40
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
     strategy:
       fail-fast: false
       matrix:
@@ -23,15 +23,17 @@ jobs:
           distribution: temurin
           java-version: 25
       - uses: gradle/actions/setup-gradle@v4
-      - run: sudo apt-get update && sudo apt-get install -y xvfb mesa-utils libgl1-mesa-dri
+      - run: sudo apt-get update && sudo apt-get install -y mesa-vulkan-drivers
+      - name: Select the OpenGL backend
+        run: |
+          mkdir -p build/run/clientGameTest
+          echo 'preferredGraphicsBackend:"opengl"' >> build/run/clientGameTest/options.txt
       - name: Run ${{ matrix.scenario }} with ${{ matrix.renderer }}
-        env:
-          LIBGL_ALWAYS_SOFTWARE: '1'
         run: |
           FLAG=""
           if [ "${{ matrix.scenario }}" != "default" ]; then FLAG="-P${{ matrix.scenario }}=true"; fi
-          xvfb-run --auto-servernum --server-args='-screen 0 1280x800x24' \
-            ./gradlew runClientGameTest -PtestRenderer=${{ matrix.renderer }} $FLAG
+          # A client that cannot open a window hangs rather than exits; bound the run.
+          timeout 25m ./gradlew runClientGameTest --stacktrace -PtestRenderer=${{ matrix.renderer }} $FLAG
       - uses: actions/upload-artifact@v4
         if: always()
         with:
