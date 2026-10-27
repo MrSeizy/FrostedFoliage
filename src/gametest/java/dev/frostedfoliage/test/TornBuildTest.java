@@ -30,6 +30,7 @@ public final class TornBuildTest {
         BlockPos at = pauseAt;
         if (at == null || !at.equals(pos)) return;
         pauseAt = null;
+        FrostedFoliageClient.LOGGER.info("TORN BUILD paused at {} on {} after meshing {}", pos, Thread.currentThread().getName(), meshedBlocks.keySet());
         paused.countDown();
         try { resume.await(60, TimeUnit.SECONDS); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
     }
@@ -59,8 +60,7 @@ public final class TornBuildTest {
             context.waitFor(c -> FrostedFoliageClient.system().coverage(FIRST) > 0.99
                     && FrostedFoliageClient.system().diagnostics().contains("pending=0/0 "), 400);
             resumeMeshing(context);
-            check(meshedBlocks.get(PAUSE) > 0.99 && meshedBlocks.get(FIRST) == 0, "The paused worker did not finish a torn mesh: "
-                    + meshedBlocks.get(FIRST) + " / " + meshedBlocks.get(PAUSE));
+            torn(0, 1);
             LostRebuildTest.dropRebuilds = false;
             await(context, c -> stale(c) > 0, 60, "the torn mesh was never found stale");
             await(context, c -> CANOPY.stream().allMatch(p -> meshedBlocks.get(p) > 0.99), 400, "snow never reached every block");
@@ -76,8 +76,7 @@ public final class TornBuildTest {
             context.waitFor(c -> FrostedFoliageClient.system().diagnostics().contains("snapshots=0 ")
                     && FrostedFoliageClient.system().diagnostics().contains("pending=0/0 "), 400);
             resumeMeshing(context);
-            check(meshedBlocks.get(PAUSE) == 0 && meshedBlocks.get(FIRST) > 0.99, "The paused worker did not finish a torn mesh: "
-                    + meshedBlocks.get(FIRST) + " / " + meshedBlocks.get(PAUSE));
+            torn(1, 0);
             LostRebuildTest.dropRebuilds = false;
             await(context, c -> stale(c) > 0, 60, "the torn mesh was never found stale");
             await(context, c -> CANOPY.stream().allMatch(p -> meshedBlocks.get(p) == 0), 400, "excluded leaves kept their snow");
@@ -102,8 +101,16 @@ public final class TornBuildTest {
         context.waitFor(c -> FrostedFoliageClient.system().ground().settled(), 1200);
     }
 
+    /** The paused job must have meshed FIRST before pausing and PAUSE after resuming, from different states. */
+    private static void torn(double first, double pause) {
+        Double atFirst = meshedBlocks.get(FIRST), atPause = meshedBlocks.get(PAUSE);
+        check(atFirst != null && atPause != null && Math.abs(atFirst - first) < 0.01 && Math.abs(atPause - pause) < 0.01,
+                "The paused worker did not finish a torn mesh (first block " + atFirst + ", paused block " + atPause + "): " + meshedBlocks);
+    }
+
     /** Requests a rebuild of the canopy's section and lets the client run until a worker is paused at PAUSE. */
     private static void pauseMeshing(ClientGameTestContext context) {
+        CANOPY.forEach(meshedBlocks::remove); // Only blocks the paused job itself meshes may count.
         paused = new CountDownLatch(1); resume = new CountDownLatch(1); pauseAt = PAUSE;
         context.runOnClient(c -> c.levelExtractor.setSectionDirty(0, 4, 0));
         context.waitFor(c -> paused.getCount() == 0, 200);
