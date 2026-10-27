@@ -4,12 +4,12 @@ import dev.frostedfoliage.config.ConfigDiff;
 import dev.frostedfoliage.config.SnowConfig;
 import dev.frostedfoliage.core.BoundedSectionStore;
 import dev.frostedfoliage.core.ChunkRing;
+import dev.frostedfoliage.core.MeshAcks;
+import dev.frostedfoliage.core.ReprioritizeGate;
 import dev.frostedfoliage.core.RetryBackoff;
 import dev.frostedfoliage.core.SectionScheduler;
 import dev.frostedfoliage.core.SnowMath;
 import java.util.Locale;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.BlockPos;
@@ -25,14 +25,15 @@ public final class SnowSystem {
     private final BoundedSectionStore<SectionSnow> snapshots = new BoundedSectionStore<>();
     private final SectionScheduler scheduler = new SectionScheduler(2 * SnowConfig.MAX_CACHED_SECTIONS);
     private final ChunkRing ring = new ChunkRing();
-    // Written by chunk meshing workers: what each section's mesh was last built from.
-    private final Map<Long, MeshState> meshed = new ConcurrentHashMap<>();
+    // Written by chunk meshing workers: what each section's mesh was last built from, kept only while that had snow.
+    private final MeshAcks<MeshState> meshed = new MeshAcks<>();
+    private final ReprioritizeGate reprioritize = new ReprioritizeGate(2, 40);
     private volatile SnowConfig config;
     private volatile Progress progress = new Progress(0, 0);
     private volatile int appearance;
     private ClientLevel world;
     private double mild, freezing, drySeconds;
-    private int ticks, lastSignature = -1, stale;
+    private int ticks, lastSignature = -1, stale, unmeshed;
     private long captures, rebuilds, captureNanos, tickNanos;
     private int focusX, focusY, focusZ;
     private boolean focused, preview, progressStale;
@@ -85,7 +86,7 @@ public final class SnowSystem {
 
     public void reset(ClientLevel next) {
         world = next;
-        scheduler.clear(); snapshots.clear(); meshed.clear(); retries.clear();
+        scheduler.clear(); snapshots.clear(); meshed.clear(); retries.clear(); reprioritize.reset();
         focused = false; ring.restart();
         mild = freezing = drySeconds = 0;
         progress = new Progress(0, 0);
@@ -127,7 +128,7 @@ public final class SnowSystem {
         ground.unload(chunk);
         for (int i = 0; i < level.getSectionsCount(); i++) {
             long key = SectionPos.asLong(chunk.getPos().x(), level.getSectionYFromSectionIndex(i), chunk.getPos().z());
-            scheduler.unload(key); snapshots.remove(key);
+            scheduler.unload(key); snapshots.remove(key); meshed.remove(key); retries.settled(key);
         }
         ring.restart();
     }
@@ -160,13 +161,13 @@ public final class SnowSystem {
         int x = pos.getX() >> 4, y = pos.getY() >> 4, z = pos.getZ() >> 4;
         if (!focused || x != focusX || y != focusY || z != focusZ) {
             focusX = x; focusY = y; focusZ = z; focused = true;
-            // Captured coordinates keep the ordered sets' comparator stable between reprioritizations.
-            scheduler.prioritize(key -> {
-                long dx = (long) SectionPos.x(key) - x, dy = (long) SectionPos.y(key) - y, dz = (long) SectionPos.z(key) - z;
-                return dx * dx + dy * dy + dz * dz;
-            });
             ring.restart();
         }
+        // Captured coordinates keep the ordered sets' comparator stable between reprioritizations.
+        if (reprioritize.due(x, y, z, ticks)) scheduler.prioritize(key -> {
+            long dx = (long) SectionPos.x(key) - x, dy = (long) SectionPos.y(key) - y, dz = (long) SectionPos.z(key) - z;
+            return dx * dx + dy * dy + dz * dz;
+        });
         ring.resize(client.options.getEffectiveRenderDistance());
     }
 
@@ -220,12 +221,13 @@ public final class SnowSystem {
             long captureStart = System.nanoTime();
             SectionSnow data = SectionSnow.capture(world, chunk, y, foliage, config);
             boolean changed = !data.sameEnvironment(snapshots.get(key));
-            snapshots.put(key, data, config.maxCachedSections());
+            // An unchanged environment keeps its snapshot object: meshes built from it stay acknowledged.
+            if (changed) snapshots.put(key, data, config.maxCachedSections());
             captures++; captureNanos += System.nanoTime() - captureStart;
             if (changed) retries.settled(key);
             scheduler.captured(key, data.hasSnow(), changed);
         }
-        if (ticks % RETRY_TICKS == 0) retryLostRebuilds();
+        if (ticks % RETRY_TICKS == 0) retryLostRebuilds(client);
         for (int i = 0; i < config.rebuildsPerTick(); i++) {
             Long key = scheduler.nextRebuild();
             if (key == null) break;
@@ -245,21 +247,26 @@ public final class SnowSystem {
         return coverage(snapshots.get(SectionPos.asLong(pos)), progress, config, pos, plant);
     }
 
-    /** Coverage for chunk meshing, which also records what the section's mesh is being built from. */
-    public double meshCoverage(BlockPos pos, boolean plant) {
+    /**
+     * Called by chunk meshing workers for every block they mesh. The first block of a run acknowledges what the
+     * section's mesh is being built from, so a run that straddles a change records the older state and is retried.
+     * A run that starts without snow removes the acknowledgment: whatever an older snapshot put in the mesh is gone,
+     * even when the section no longer holds any eligible foliage.
+     */
+    public void meshing(BlockPos pos) {
         long key = SectionPos.asLong(pos);
-        // Read the generation before the config it describes, so a racing change looks stale rather than current.
+        if (!meshed.begins(key, SectionSnow.blockIndex(pos))) return;
+        // Read the generation before the state it describes, so a racing change looks stale rather than current.
         int look = appearance;
         SectionSnow snapshot = snapshots.get(key);
         Progress p = progress;
-        SnowConfig c = config;
-        if (snapshot != null) {
-            MeshState seen = meshed.get(key);
-            if (seen == null || seen.snapshot() != snapshot || seen.progress() != p || seen.appearance() != look) {
-                meshed.put(key, new MeshState(snapshot, p, look));
-            }
-        }
-        return coverage(snapshot, p, c, pos, plant);
+        if (snapshot != null && snapshot.hasSnow()) meshed.put(key, new MeshState(snapshot, p, look));
+        else meshed.remove(key);
+    }
+
+    /** Coverage for chunk meshing. */
+    public double meshCoverage(BlockPos pos, boolean plant) {
+        return coverage(snapshots.get(SectionPos.asLong(pos)), progress, config, pos, plant);
     }
 
     private static double coverage(SectionSnow snapshot, Progress p, SnowConfig config, BlockPos pos, boolean plant) {
@@ -274,33 +281,39 @@ public final class SnowSystem {
     /**
      * A renderer can drop a rebuild request: Sodium ignores one while the section's first mesh is still being built, so
      * snow captured in that window never reaches it. Request again until a mesh is built from the current snow, backing
-     * off for sections the renderer is only deferring, such as those out of view.
+     * off for sections the renderer is only deferring, such as those out of view. A mesh still showing snow from a
+     * snapshot that was since evicted or discarded is requested directly until it is rebuilt without snow.
      */
-    private void retryLostRebuilds() {
+    private void retryLostRebuilds(Minecraft client) {
         Progress p = progress;
         int look = appearance;
-        stale = 0;
+        stale = unmeshed = 0;
         for (long key : scheduler.retainedKeys()) {
-            SectionSnow data = snapshots.get(key);
-            if (data == null || current(meshed.get(key), data, p, look)) { retries.settled(key); continue; }
-            stale++;
+            MeshState seen = meshed.get(key);
+            if (current(seen, snapshots.get(key), p, look)) { retries.settled(key); continue; }
+            // Never meshed since its snow arrived (out of view, or a request still pending) versus meshed from older state.
+            if (seen == null) unmeshed++; else stale++;
             if (retries.due(key, ticks)) scheduler.rebuild(key);
         }
-        // Workers can record a section just after it unloads.
-        meshed.keySet().removeIf(key -> snapshots.get(key) == null);
-        retries.removeIf(key -> snapshots.get(key) == null);
+        for (long key : meshed.keys()) {
+            if (snapshots.get(key) != null) continue;
+            if (!world.getChunkSource().hasChunk(SectionPos.x(key), SectionPos.z(key))) { meshed.remove(key); retries.settled(key); continue; }
+            stale++;
+            if (retries.due(key, ticks)) { client.levelExtractor.setSectionDirty(SectionPos.x(key), SectionPos.y(key), SectionPos.z(key)); rebuilds++; }
+        }
+        retries.removeIf(key -> snapshots.get(key) == null && meshed.get(key) == null);
     }
 
     private static boolean current(MeshState seen, SectionSnow data, Progress p, int look) {
-        // Without eligible foliage the mesh never shows snow, unless it was built from an older, snowy capture.
-        if (!data.hasSnow()) return seen == null || seen.snapshot() == data || !seen.snapshot().hasSnow();
+        // Without eligible foliage the mesh may only show snow from an older capture, which its next build removes.
+        if (data == null || !data.hasSnow()) return seen == null;
         return seen != null && seen.snapshot() == data && seen.progress() == p && seen.appearance() == look;
     }
 
     public String diagnostics() {
         return String.format(Locale.ROOT,
-                "coverage=%.3f/%.3f preview=%b sections=%d snapshots=%d pending=%d/%d cleanup=%d evictions=%d captures=%d rebuilds=%d stale=%d captureMs=%.3f tickUs=%.3f snapshotBytes<=%d",
-                mild, freezing, preview, scheduler.size(), snapshots.size(), scheduler.pendingCaptures(), scheduler.pendingRebuilds(), scheduler.pendingCleanup(), scheduler.evictions(), captures, rebuilds, stale,
+                "coverage=%.3f/%.3f preview=%b sections=%d snapshots=%d pending=%d/%d cleanup=%d evictions=%d captures=%d rebuilds=%d stale=%d unmeshed=%d captureMs=%.3f tickUs=%.3f snapshotBytes<=%d",
+                mild, freezing, preview, scheduler.size(), snapshots.size(), scheduler.pendingCaptures(), scheduler.pendingRebuilds(), scheduler.pendingCleanup(), scheduler.evictions(), captures, rebuilds, stale, unmeshed,
                 captures == 0 ? 0 : captureNanos / 1e6 / captures, ticks == 0 ? 0 : tickNanos / 1e3 / ticks, snapshots.size() * 4096L)
                 + " " + ground.diagnostics();
     }

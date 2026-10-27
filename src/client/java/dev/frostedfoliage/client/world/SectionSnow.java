@@ -23,7 +23,9 @@ public final class SectionSnow {
     public boolean sameEnvironment(SectionSnow other) {
         return other != null && Arrays.equals(environment, other.environment);
     }
-    public int sample(BlockPos pos) { return environment[index(pos.getX(), pos.getY(), pos.getZ())] & 255; }
+    public int sample(BlockPos pos) { return environment[blockIndex(pos)] & 255; }
+    /** A block's 0..4095 position within its section. */
+    public static int blockIndex(BlockPos pos) { return index(pos.getX(), pos.getY(), pos.getZ()); }
     private static int index(int x, int y, int z) { return (y & 15) << 8 | (z & 15) << 4 | x & 15; }
 
     public static SectionSnow capture(ClientLevel level, LevelChunk chunk, int sectionY, Foliage foliage, SnowConfig config) {

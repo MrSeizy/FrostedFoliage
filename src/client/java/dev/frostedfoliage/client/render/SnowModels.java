@@ -20,7 +20,10 @@ import net.fabricmc.fabric.api.client.renderer.v1.mesh.MutableQuadView;
 import net.fabricmc.fabric.api.client.renderer.v1.mesh.QuadEmitter;
 import net.fabricmc.fabric.api.client.renderer.v1.mesh.QuadAtlas;
 import net.fabricmc.fabric.api.client.renderer.v1.sprite.SpriteFinder;
+import net.fabricmc.loader.api.FabricLoader;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.block.BlockAndTintGetter;
+import net.minecraft.client.renderer.block.ModelBlockRenderer;
 import net.minecraft.client.renderer.block.dispatch.BlockStateModel;
 import net.minecraft.client.renderer.chunk.ChunkSectionLayer;
 import net.minecraft.client.renderer.texture.MissingTextureAtlasSprite;
@@ -39,6 +42,8 @@ import static dev.frostedfoliage.client.render.SnowSpriteSource.PLANT_STRIDE;
 import static dev.frostedfoliage.client.render.SnowSpriteSource.STAGES;
 
 public final class SnowModels {
+    // Sodium draws every quad of a Fast-graphics leaf block in its opaque pass, where a mask's transparent texels show as snow.
+    private static final boolean OPAQUE_LEAF_PASS = FabricLoader.getInstance().isModLoaded("sodium");
     private SnowModels() { }
     public static void register(SnowSystem system) {
         ModelLoadingPlugin.register(context -> {
@@ -113,13 +118,13 @@ public final class SnowModels {
         SnowModel(BlockStateModel wrapped, SnowSystem system, Bank bank) { super(wrapped); this.system = system; this.bank = bank; }
 
         @Override public Object createGeometryKey(BlockAndTintGetter level, BlockPos pos, BlockState state, RandomSource random) {
-            return (system.active() && system.foliage().test(state)) || system.ground().layers(pos) > 0
-                    ? null : wrapped.createGeometryKey(level, pos, state, random);
+            // Foliage geometry depends on position whenever snow may arrive, so never let a renderer share it.
+            return system.foliage().test(state) || system.ground().layers(pos) > 0 ? null : wrapped.createGeometryKey(level, pos, state, random);
         }
 
         @Override public void emitQuads(QuadEmitter emitter, BlockAndTintGetter level, BlockPos pos, BlockState state,
                                         RandomSource random, Predicate<Direction> cullTest) {
-            if (level != BlockAndTintGetter.EMPTY) emitGround(emitter, level, pos);
+            if (level != BlockAndTintGetter.EMPTY) { system.meshing(pos); emitGround(emitter, level, pos); }
             // Every block of every rebuilt chunk passes through here, so test eligibility before anything else.
             boolean foliage = level != BlockAndTintGetter.EMPTY && system.foliage().test(state);
             boolean plant = foliage && system.foliage().isPlant(state);
@@ -130,6 +135,7 @@ public final class SnowModels {
             if (worker.output != null) worker = new Worker();
             worker.output = emitter; worker.bank = bank; worker.amount = amount; worker.config = system.config();
             worker.plant = plant; worker.plantPart = PlantTypes.part(state);
+            worker.opaquePass = OPAQUE_LEAF_PASS && ModelBlockRenderer.forceOpaque(Minecraft.getInstance().options.cutoutLeaves().get(), state);
             worker.plantVariant = SnowMath.plantVariant(pos.getX(), pos.getY(), pos.getZ());
             worker.blockX = pos.getX(); worker.blockY = pos.getY(); worker.blockZ = pos.getZ();
             int open = 0;
@@ -179,7 +185,7 @@ public final class SnowModels {
         SnowConfig config;
         double amount, exterior;
         int plantVariant, plantPart, blockX, blockY, blockZ;
-        boolean plant;
+        boolean plant, opaquePass;
         void accept(MutableQuadView quad) {
             output.copyFrom(quad);
             // Sodium 0.9.2 copyFrom copies the valid-geometry flag but omits its cached normal facing.
@@ -214,6 +220,8 @@ public final class SnowModels {
                 }
                 edge = SnowMath.quadDepthEdge(ys, us, vs);
             }
+            // Only a mask without holes of its own survives an opaque pass; partial and tapered snow would blanket the face.
+            if (opaquePass && !SnowMath.holeFreeMask(stage, edge)) return;
             int variant = SnowMath.leafVariant(blockX, blockY, blockZ, face.ordinal());
             TextureAtlasSprite mask = masks[edge * LEAF_STRIDE + variant * STAGES + stage - 1];
             if (mask == null) return;
