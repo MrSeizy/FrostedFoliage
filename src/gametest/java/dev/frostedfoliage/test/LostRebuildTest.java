@@ -84,6 +84,17 @@ public final class LostRebuildTest {
             context.waitFor(c -> FrostedFoliageClient.system().diagnostics().contains(" groundStale=0"), 200);
             context.runOnClient(c -> FrostedFoliageClient.LOGGER.info("LOST REBUILD ground recovered: meshed layers {} after dropped requests; {}",
                     groundMeshedLayers, FrostedFoliageClient.system().diagnostics()));
+
+            // A chunk re-send (biome packet, chunk reload) recaptures the chunk and its ground neighbours. Nothing has
+            // changed, so neither the leaves nor the ground may request another rebuild, even though the renderer has
+            // already meshed them from the previous capture.
+            long leafRebuilds = count(context, " rebuilds="), groundRebuilds = count(context, " groundRebuilds=");
+            context.runOnClient(c -> FrostedFoliageClient.system().load(c.level, c.level.getChunk(0, 0)));
+            context.waitTicks(60);
+            check(count(context, " rebuilds=") == leafRebuilds, "An unchanged leaf recapture requested a rebuild");
+            check(count(context, " groundRebuilds=") == groundRebuilds, "An unchanged ground recapture requested a rebuild");
+            context.runOnClient(c -> FrostedFoliageClient.LOGGER.info("LOST REBUILD unchanged recapture requested nothing; {}",
+                    FrostedFoliageClient.system().diagnostics()));
             context.runOnClient(c -> FrostedFoliageClient.system().setPreview(false));
         } finally {
             dropRebuilds = false;

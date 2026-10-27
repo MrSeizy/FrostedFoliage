@@ -179,6 +179,12 @@ public final class GroundSnowTest {
             context.waitTicks(100);
             String after = context.computeOnClient(c -> FrostedFoliageClient.system().ground().diagnostics());
             check(before.equals(after), "Quiet terrain kept scanning or requesting rebuilds: " + before + " -> " + after);
+            // A chunk re-send recaptures this chunk and its neighbours; unchanged covers must not rebuild their sections.
+            long rebuildsBefore = count(context, "groundRebuilds=");
+            context.runOnClient(c -> FrostedFoliageClient.system().load(c.level, c.level.getChunk(0, 0)));
+            context.waitTicks(60);
+            check(count(context, "groundRebuilds=") == rebuildsBefore, "Unchanged ground recaptures after a chunk re-send requested rebuilds: "
+                    + context.computeOnClient(c -> FrostedFoliageClient.system().ground().diagnostics()));
 
             // Unequal neighbors in one chunk: a full-height column beside a one-layer one keeps its exposed side.
             BlockPos step = EDGE.west();
@@ -204,6 +210,12 @@ public final class GroundSnowTest {
     }
 
     private static int layers(BlockPos p) { return FrostedFoliageClient.system().ground().layers(p); }
+    private static long count(ClientGameTestContext context, String label) {
+        String status = context.computeOnClient(c -> FrostedFoliageClient.system().ground().diagnostics());
+        var match = java.util.regex.Pattern.compile(java.util.regex.Pattern.quote(label) + "(\\d+)").matcher(status);
+        if (!match.find()) throw new AssertionError("No " + label + " in " + status);
+        return Long.parseLong(match.group(1));
+    }
     private static void toggle(ClientGameTestContext context, boolean trees, boolean plants) {
         context.runOnClient(c -> {
             var system = FrostedFoliageClient.system(); system.configure(system.config().withGroundSnow(trees, plants));

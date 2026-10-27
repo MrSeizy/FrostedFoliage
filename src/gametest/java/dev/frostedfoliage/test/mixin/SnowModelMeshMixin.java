@@ -2,6 +2,7 @@ package dev.frostedfoliage.test.mixin;
 
 import dev.frostedfoliage.client.FrostedFoliageClient;
 import dev.frostedfoliage.test.LostRebuildTest;
+import dev.frostedfoliage.test.TornBuildTest;
 import java.util.function.Predicate;
 import net.fabricmc.fabric.api.client.renderer.v1.mesh.QuadEmitter;
 import net.minecraft.client.renderer.block.BlockAndTintGetter;
@@ -24,7 +25,11 @@ abstract class SnowModelMeshMixin {
             RandomSource random, Predicate<Direction> cullTest, CallbackInfo ci) {
         if (level == BlockAndTintGetter.EMPTY) return;
         if (state.getBlock() instanceof LeavesBlock) {
-            LostRebuildTest.meshedCoverage.put(SectionPos.asLong(pos), FrostedFoliageClient.system().coverage(pos));
+            // Pause first: the recorded coverage must be what the resumed worker goes on to mesh.
+            TornBuildTest.pauseIfRequested(pos);
+            double coverage = FrostedFoliageClient.system().coverage(pos);
+            LostRebuildTest.meshedCoverage.put(SectionPos.asLong(pos), coverage);
+            TornBuildTest.meshedBlocks.put(pos.immutable(), coverage);
         }
         if (pos.equals(LostRebuildTest.GROUND)) LostRebuildTest.groundMeshedLayers = FrostedFoliageClient.system().ground().layers(pos);
     }
