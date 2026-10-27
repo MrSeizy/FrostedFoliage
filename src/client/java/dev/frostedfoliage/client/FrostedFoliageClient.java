@@ -54,7 +54,7 @@ public final class FrostedFoliageClient implements ClientModInitializer {
         SpriteSourceRegistry.register(Identifier.fromNamespaceAndPath(MOD_ID, "snow_particles"), SnowParticleSource.CODEC);
         SnowModels.register(system);
         ClientTickEvents.END_CLIENT_TICK.register(system::tick);
-        ClientChunkEvents.CHUNK_LOAD.register(system::load);
+        // Chunk and biome packets both reach ClientLevel.onChunkLoaded, which ClientLevelMixin forwards to the system.
         ClientChunkEvents.CHUNK_UNLOAD.register(system::unload);
         ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> system.reset(null));
         CommonLifecycleEvents.TAGS_LOADED.register((registries, clientSide) -> {
