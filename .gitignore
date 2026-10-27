@@ -21,3 +21,6 @@ __pycache__/
 !.env.example
 !.env.sample
 !.env.template
+
+# The unit-test JVM picks up the Minecraft log4j configuration and writes here
+/logs/
