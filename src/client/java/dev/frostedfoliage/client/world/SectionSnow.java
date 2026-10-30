@@ -13,12 +13,15 @@ import net.minecraft.world.level.levelgen.Heightmap;
 
 /** Main-thread capture; workers only read this immutable byte array. */
 public final class SectionSnow {
+    private final long revision;
     private final byte[] environment;
     private final boolean hasSnow;
-    private SectionSnow(byte[] environment, boolean hasSnow) {
+    private SectionSnow(long revision, byte[] environment, boolean hasSnow) {
+        this.revision = revision;
         this.environment = environment;
         this.hasSnow = hasSnow;
     }
+    public long revision() { return revision; }
     public boolean hasSnow() { return hasSnow; }
     public boolean sameEnvironment(SectionSnow other) {
         return other != null && Arrays.equals(environment, other.environment);
@@ -28,7 +31,7 @@ public final class SectionSnow {
     public static int blockIndex(BlockPos pos) { return index(pos.getX(), pos.getY(), pos.getZ()); }
     private static int index(int x, int y, int z) { return (y & 15) << 8 | (z & 15) << 4 | x & 15; }
 
-    public static SectionSnow capture(ClientLevel level, LevelChunk chunk, int sectionY, Foliage foliage, SnowConfig config) {
+    public static SectionSnow capture(ClientLevel level, LevelChunk chunk, int sectionY, Foliage foliage, SnowConfig config, long revision) {
         byte[] data = new byte[4096];
         boolean any = false;
         LevelChunkSection section = chunk.getSection(level.getSectionIndexFromSectionY(sectionY));
@@ -51,6 +54,6 @@ public final class SectionSnow {
                 }
             }
         }
-        return new SectionSnow(data, any);
+        return new SectionSnow(revision, data, any);
     }
 }

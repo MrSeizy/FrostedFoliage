@@ -2,6 +2,7 @@ package dev.frostedfoliage.client.world;
 
 import dev.frostedfoliage.client.FrostedFoliageClient;
 import dev.frostedfoliage.config.SnowConfig;
+import dev.frostedfoliage.core.SectionRebuildQueue;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.chunk.LevelChunk;
@@ -18,7 +19,8 @@ public final class GroundDiscoveryTest {
         var foliage = new Foliage(); foliage.refresh(config, true);
         try {
             for (boolean unloading : new boolean[]{false, true}) {
-                var ground = new GroundSnowSystem(config, foliage);
+                var queue = new SectionRebuildQueue(64);
+                var ground = new GroundSnowSystem(config, foliage, queue);
                 ground.reset(client.level);
                 client.player.setPos(-56, 70, -56);
                 // Exhaust the 16-chunk cache around an old focus, without discovering the target.
@@ -29,6 +31,7 @@ public final class GroundDiscoveryTest {
                 for (int tick = 0; tick < 40; tick++) {
                     if (unloading) ground.unload(distant); else ground.load(distant);
                     ground.tick(client);
+                    queue.drain(2 * config.rebuildsPerTick(), key -> true, (key, sources) -> ground.rebuilt());
                 }
                 check(ground.layers(TARGET) == 1, "Chunk " + (unloading ? "unloads" : "loads") + " starved nearby discovery: " + ground.diagnostics());
                 check(ground.diagnostics().contains("groundChunks=16 "), "Ground cache did not obey its capacity: " + ground.diagnostics());
@@ -36,7 +39,10 @@ public final class GroundDiscoveryTest {
                 // A retained unload must replenish capacity even after a completed discovery pass.
                 ground.unload(chunk(client, 1, 1));
                 check(ground.layers(TARGET) == 0, "Unloaded chunk retained its snapshot");
-                for (int tick = 0; tick < 40; tick++) ground.tick(client);
+                for (int tick = 0; tick < 40; tick++) {
+                    ground.tick(client);
+                    queue.drain(2 * config.rebuildsPerTick(), key -> true, (key, sources) -> ground.rebuilt());
+                }
                 check(ground.layers(TARGET) == 1, "Completed discovery did not restart after capacity was freed");
                 // No renderer draws this standalone instance, so it keeps retrying unconfirmed rebuilds by design.
                 check(ground.diagnostics().contains("groundPending=0/"), "Discovery did not drain its pending captures: " + ground.diagnostics());

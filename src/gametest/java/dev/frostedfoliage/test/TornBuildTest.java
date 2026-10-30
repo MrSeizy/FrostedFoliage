@@ -2,6 +2,8 @@ package dev.frostedfoliage.test;
 
 import dev.frostedfoliage.client.FrostedFoliageClient;
 import dev.frostedfoliage.config.SnowConfig;
+import dev.frostedfoliage.core.BoundedSectionStore;
+import java.lang.ref.WeakReference;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -87,10 +89,19 @@ public final class TornBuildTest {
             // discarded, and the cleanup request is dropped. The torn mesh keeps snow on the blocks before the pause.
             settle(context);
             pauseMeshing(context);
+            WeakReference<Object> evictedSnapshot = context.computeOnClient(c -> snapshotReference());
             LostRebuildTest.dropRebuilds = true;
             context.runOnClient(c -> FrostedFoliageClient.system().configure(config.toBuilder().excludeBlocks(List.of("minecraft:oak_leaves")).build()));
             context.waitFor(c -> FrostedFoliageClient.system().diagnostics().contains("snapshots=0 ")
                     && FrostedFoliageClient.system().diagnostics().contains("pending=0/0 "), 400);
+            // The paused worker and its old acknowledgment remain alive while the cache has discarded this capture.
+            // Neither may pin the snapshot's array just to remember which version was meshed.
+            for (int attempt = 0; attempt < 10 && evictedSnapshot.get() != null; attempt++) {
+                System.gc();
+                context.waitTicks(2);
+            }
+            check(evictedSnapshot.get() == null, "An evicted foliage snapshot is still strongly retained by mesh bookkeeping");
+            FrostedFoliageClient.LOGGER.info("TORN BUILD memory: evicted snapshot reclaimed while its stale mesh awaits cleanup");
             resumeMeshing(context);
             torn(1, 0);
             await(context, c -> stale(c) > 0, 80, "the torn mesh was never found stale");
@@ -159,4 +170,14 @@ public final class TornBuildTest {
     }
 
     private static void check(boolean condition, String message) { if (!condition) throw new AssertionError(message); }
+
+    private static WeakReference<Object> snapshotReference() {
+        try {
+            var system = FrostedFoliageClient.system();
+            var field = system.getClass().getDeclaredField("snapshots"); field.setAccessible(true);
+            Object snapshot = ((BoundedSectionStore<?>) field.get(system)).get(net.minecraft.core.SectionPos.asLong(FIRST));
+            check(snapshot != null, "No snapshot to exercise eviction");
+            return new WeakReference<>(snapshot);
+        } catch (ReflectiveOperationException e) { throw new AssertionError(e); }
+    }
 }

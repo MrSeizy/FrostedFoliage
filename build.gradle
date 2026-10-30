@@ -65,7 +65,7 @@ def gameTestFlags = [
     reloadTest: 'reload', groundTest: 'ground', galleryCapture: 'gallery', captureTest: 'capture',
     legacyCapture: 'capture.legacy', priorityTest: 'priority', appearanceTest: 'appearance', depthTest: 'depth',
     videoCapture: 'video', timelapseCapture: 'timelapse', plantTest: 'plants', iconCapture: 'icon',
-    vanillaPlants: 'vanillaPlants', treeTypesTest: 'treeTypes', leavesTest: 'leaves', rebuildTest: 'rebuild', tornTest: 'torn', flightTest: 'flight',
+    vanillaPlants: 'vanillaPlants', treeTypesTest: 'treeTypes', leavesTest: 'leaves', rebuildTest: 'rebuild', tornTest: 'torn', flightTest: 'flight', cacheStressTest: 'cacheStress',
 ]
 loom.runs.named('clientGameTest') {
     systemProperties.put('frostedfoliage.test.renderer', testRenderer)
@@ -73,6 +73,7 @@ loom.runs.named('clientGameTest') {
         systemProperties.put("frostedfoliage.test.${flag.value}".toString(), providers.gradleProperty(flag.key).getOrElse('false'))
     }
     systemProperties.put('frostedfoliage.test.churn.label', providers.gradleProperty('churnLabel').getOrElse('current'))
+    systemProperties.put('frostedfoliage.test.flightHalf', providers.gradleProperty('flightHalf').getOrElse('640'))
     systemProperties.put('frostedfoliage.test.shaderExpected', project.hasProperty('shaderPack').toString())
 }
 tasks.named('runClientGameTest') {

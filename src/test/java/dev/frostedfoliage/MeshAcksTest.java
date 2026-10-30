@@ -1,10 +1,24 @@
 package dev.frostedfoliage;
 
 import dev.frostedfoliage.core.MeshAcks;
+import dev.frostedfoliage.core.MeshRevision;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class MeshAcksTest {
+    @Test void tornAndEvictedMeshesKeepOnlyTheFirstRevisionUntilANewRun() {
+        var acks = new MeshAcks<MeshRevision>();
+        var old = new MeshRevision(1, 10, 2);
+        if (acks.begins(7, 0)) acks.put(7, old);
+        var newer = new MeshRevision(2, 11, 3);
+        if (acks.begins(7, 1)) acks.put(7, newer);
+        assertFalse(acks.get(7).matches(2, 11, 3), "A torn mesh must still require a retry");
+        // Evicting the capture leaves only these numbers to remember that its mesh needs cleanup.
+        assertEquals(old, acks.get(7));
+        if (acks.begins(7, 0)) acks.remove(7);
+        assertNull(acks.get(7), "A new snow-free run clears the evicted acknowledgment");
+    }
+
     @Test void onlyTheFirstBlockOfARunBeginsIt() {
         var acks = new MeshAcks<String>();
         assertTrue(acks.begins(7, 0));

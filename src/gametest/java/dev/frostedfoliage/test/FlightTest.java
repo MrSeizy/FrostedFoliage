@@ -2,6 +2,10 @@ package dev.frostedfoliage.test;
 
 import dev.frostedfoliage.client.FrostedFoliageClient;
 import dev.frostedfoliage.config.SnowConfig;
+import com.google.gson.GsonBuilder;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -19,13 +23,17 @@ import net.minecraft.world.level.levelgen.presets.WorldPresets;
  * snowy sections.
  */
 public final class FlightTest {
-    private static final int HALF = 640;
+    private static final int HALF = Integer.getInteger("frostedfoliage.test.flightHalf", 640);
 
     public void run(ClientGameTestContext context) {
         context.runOnClient(c -> {
             c.options.renderDistance().set(12);
             c.options.pauseOnLostFocus = false;
-            FrostedFoliageClient.system().configure(SnowConfig.builder().snowDepth(1).quality(SnowConfig.Quality.HIGH).maxVisualUpdatesPerSecond(2).build());
+            c.options.enableVsync().set(false);
+            c.options.inactivityFpsLimit().set(net.minecraft.client.InactivityFpsLimit.MINIMIZED);
+            c.options.framerateLimit().set(260);
+            FrostedFoliageClient.system().configure(SnowConfig.builder().snowDepth(1).quality(SnowConfig.Quality.HIGH)
+                    .maxCachedSections(Boolean.getBoolean("frostedfoliage.test.cacheStress") ? 64 : 4096).maxVisualUpdatesPerSecond(2).build());
         });
         // The default test world is flat; natural terrain with snowy taiga needs the normal preset and a fixed seed.
         try (var world = context.worldBuilder().adjustSettings(s -> {
@@ -46,6 +54,7 @@ public final class FlightTest {
             server.runCommand("time set noon");
             server.runCommand("weather clear");
             server.runCommand("gamerule minecraft:random_tick_speed 0");
+            server.runCommand("gamerule minecraft:send_command_feedback false");
             int x = center.getX() - HALF, z = center.getZ();
             server.runCommand("tp @a " + x + " 110 " + z);
             // The harness's full chunk-download wait can time out far from spawn; wait for the player's own chunk, then settle.
@@ -65,6 +74,8 @@ public final class FlightTest {
             context.waitTicks(400);
             context.runOnClient(c -> FrostedFoliageClient.LOGGER.info("FLIGHT start near {}: {}", center.toShortString(), FrostedFoliageClient.system().diagnostics()));
             Map<String, Long> before = counters(context);
+            var memoryBefore = context.computeOnClient(c -> SnowWorkMetrics.snapshotMemory());
+            context.runOnClient(c -> { FrameMetrics.start(); SnowWorkMetrics.start(); });
             Map<String, Long> middle = null;
             // 10 m/s: at 20 m/s the integrated server's chunk sending falls behind and the client flies through nothing.
             for (int i = 0; i < 2 * HALF; i++) {
@@ -73,6 +84,19 @@ public final class FlightTest {
                 context.waitTicks(2);
                 if (i == HALF) middle = counters(context);
             }
+            var measurement = context.computeOnClient(c -> {
+                var result = new LinkedHashMap<String, Object>();
+                result.put("frames", FrameMetrics.stop());
+                result.put("work", SnowWorkMetrics.stop());
+                result.put("memoryBefore", memoryBefore);
+                result.put("memoryAfter", SnowWorkMetrics.snapshotMemory());
+                result.put("renderer", System.getProperty("frostedfoliage.test.renderer"));
+                result.put("cacheSections", FrostedFoliageClient.system().config().maxCachedSections());
+                return result;
+            });
+            try { Files.writeString(Path.of("flight-benchmark.json"), new GsonBuilder().setPrettyPrinting().create().toJson(measurement)); }
+            catch (java.io.IOException e) { throw new AssertionError(e); }
+            FrostedFoliageClient.LOGGER.info("FLIGHT METRICS {}", new GsonBuilder().create().toJson(measurement));
             context.waitTicks(400);
             Map<String, Long> after = counters(context);
             StringBuilder report = new StringBuilder("FLIGHT " + 2 * HALF + " blocks at 10 m/s through snowy taiga centred on " + center.toShortString() + ":");

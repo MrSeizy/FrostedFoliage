@@ -96,6 +96,7 @@ public final class LostRebuildTest {
             context.runOnClient(c -> FrostedFoliageClient.LOGGER.info("LOST REBUILD unchanged recapture requested nothing; {}",
                     FrostedFoliageClient.system().diagnostics()));
             context.runOnClient(c -> FrostedFoliageClient.system().setPreview(false));
+            context.runOnClient(RebuildBudgetTest::run);
         } finally {
             dropRebuilds = false;
         }

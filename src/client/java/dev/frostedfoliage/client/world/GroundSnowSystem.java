@@ -6,9 +6,11 @@ import dev.frostedfoliage.core.BoundedSectionStore;
 import dev.frostedfoliage.core.ChunkRing;
 import dev.frostedfoliage.core.GroundSnowMath;
 import dev.frostedfoliage.core.MeshAcks;
+import dev.frostedfoliage.core.MeshRevision;
 import dev.frostedfoliage.core.ReprioritizeGate;
 import dev.frostedfoliage.core.RetryBackoff;
 import dev.frostedfoliage.core.SectionScheduler;
+import dev.frostedfoliage.core.SectionRebuildQueue;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -37,9 +39,10 @@ public final class GroundSnowSystem {
     // Chunk coordinates use section keys with y=0 so the existing bounded scheduler can be shared.
     private final SectionScheduler scheduler = new SectionScheduler(2 * MAX_CHUNKS);
     private final ChunkRing ring = new ChunkRing();
+    private final SectionRebuildQueue rebuildQueue;
     private final Map<Long, Set<Integer>> dirtySections = new HashMap<>();
     // Written by chunk meshing workers: the capture each section was last meshed from, kept while it had snow there.
-    private final MeshAcks<MeshState> meshed = new MeshAcks<>();
+    private final MeshAcks<MeshRevision> meshed = new MeshAcks<>();
     private final RetryBackoff retries = new RetryBackoff(RETRY_TICKS, 5);
     private final ReprioritizeGate reprioritize = new ReprioritizeGate(2, 40);
     private volatile int look;
@@ -49,11 +52,12 @@ public final class GroundSnowSystem {
     private boolean focused, rescan;
     private Long rebuilding;
     private long captures, captureNanos, rebuilds;
+    // Survives reset so late workers cannot acknowledge a new world with a reused version.
+    private long nextRevision;
     private int ticks, stale, unmeshed;
-    private record MeshState(Cover cover, int look) { }
-    private record Cover(int[] heights, byte[] layers, byte[] kinds, boolean candidates, int[] snowSections) {
-        Cover(int[] heights, byte[] layers, byte[] kinds, boolean candidates) {
-            this(heights, layers, kinds, candidates, IntStream.range(0, 256).filter(i -> layers[i] != 0).map(i -> heights[i] >> 4).distinct().toArray());
+    private record Cover(long revision, int[] heights, byte[] layers, byte[] kinds, boolean candidates, int[] snowSections) {
+        Cover(long revision, int[] heights, byte[] layers, byte[] kinds, boolean candidates) {
+            this(revision, heights, layers, kinds, candidates, IntStream.range(0, 256).filter(i -> layers[i] != 0).map(i -> heights[i] >> 4).distinct().toArray());
         }
         boolean any() { return snowSections.length > 0; }
         boolean snowIn(int sectionY) { for (int y : snowSections) if (y == sectionY) return true; return false; }
@@ -63,7 +67,9 @@ public final class GroundSnowSystem {
         }
     }
 
-    GroundSnowSystem(SnowConfig config, Foliage foliage) { this.config = config; this.foliage = foliage; }
+    GroundSnowSystem(SnowConfig config, Foliage foliage, SectionRebuildQueue rebuildQueue) {
+        this.config = config; this.foliage = foliage; this.rebuildQueue = rebuildQueue;
+    }
     private static long key(int x, int z) { return SectionPos.asLong(x, 0, z); }
     private int limit() { return Math.max(16, Math.min(MAX_CHUNKS, config.maxCachedSections() / 4)); }
     private boolean enabled() { return enabled(config); }
@@ -89,7 +95,7 @@ public final class GroundSnowSystem {
         SnowConfig c = config;
         long section = SectionPos.asLong(ground);
         if (meshed.begins(section, SectionSnow.blockIndex(ground))) {
-            if (cover != null && cover.snowIn(SectionPos.blockToSectionCoord(ground.getY()))) meshed.put(section, new MeshState(cover, look));
+            if (cover != null && cover.snowIn(SectionPos.blockToSectionCoord(ground.getY()))) meshed.put(section, new MeshRevision(cover.revision(), 0, look));
             else meshed.remove(section); // Built without ground snow here: an older capture's snow is gone from this mesh.
         }
         if (cover == null) return 0;
@@ -104,7 +110,7 @@ public final class GroundSnowSystem {
 
     void reset(ClientLevel level) {
         world = level; scheduler.clear(); snapshots.clear(); dirtySections.clear(); meshed.clear(); retries.clear();
-        reprioritize.reset(); ring.restart(); focused = rescan = false; captures = captureNanos = rebuilds = 0; stale = 0;
+        reprioritize.reset(); ring.restart(); focused = rescan = false; captures = captureNanos = rebuilds = 0; ticks = stale = unmeshed = 0;
         rebuilding = null;
     }
 
@@ -209,15 +215,16 @@ public final class GroundSnowSystem {
                 captures++; captureNanos += System.nanoTime() - start;
             }
         }
-        if (++ticks % RETRY_TICKS == 0) retryLostRebuilds(client);
+        if (++ticks % RETRY_TICKS == 0) retryLostRebuilds();
         for (int i = 0; i < config.rebuildsPerTick(); i++) {
             if (rebuilding == null) rebuilding = scheduler.nextRebuild();
             if (rebuilding == null) break;
             long key = rebuilding;
             Set<Integer> sections = dirtySections.get(key);
             if (sections != null && !sections.isEmpty() && world.getChunkSource().hasChunk(SectionPos.x(key), SectionPos.z(key))) {
-                var iterator = sections.iterator(); int y = iterator.next(); iterator.remove();
-                client.levelExtractor.setSectionDirty(SectionPos.x(key), y, SectionPos.z(key)); rebuilds++;
+                var iterator = sections.iterator(); int y = iterator.next();
+                if (!rebuildQueue.request(SectionPos.asLong(SectionPos.x(key), y, SectionPos.z(key)), SectionRebuildQueue.GROUND, false)) break;
+                iterator.remove();
                 if (!sections.isEmpty()) continue;
             }
             dirtySections.remove(key); rebuilding = null;
@@ -227,9 +234,9 @@ public final class GroundSnowSystem {
     /**
      * A renderer can drop a rebuild request (see SnowSystem), leaving a section with outdated ground snow. Request again
      * until the section is meshed from the current capture, backing off for sections the renderer is deferring. A mesh
-     * still showing snow from a capture that was since evicted is requested directly until it is rebuilt without any.
+     * still showing snow from an evicted capture joins the shared cleanup queue until it is rebuilt without any.
      */
-    private void retryLostRebuilds(Minecraft client) {
+    private void retryLostRebuilds() {
         int look = this.look;
         stale = unmeshed = 0;
         // Sections that may show ground snow: those with snow in the current capture or in the one they were meshed from.
@@ -242,14 +249,18 @@ public final class GroundSnowSystem {
         for (long section : sections) {
             int x = SectionPos.x(section), y = SectionPos.y(section), z = SectionPos.z(section);
             Cover cover = snapshots.get(key(x, z));
-            MeshState seen = meshed.get(section);
-            boolean current = cover != null && cover.snowIn(y) ? seen != null && seen.cover() == cover && seen.look() == look : seen == null;
+            MeshRevision seen = meshed.get(section);
+            boolean current = cover != null && cover.snowIn(y) ? seen != null && seen.matches(cover.revision(), 0, look) : seen == null;
             if (current) { retries.settled(section); continue; }
             if (cover == null && !world.getChunkSource().hasChunk(x, z)) { meshed.remove(section); retries.settled(section); continue; }
             if (seen == null) unmeshed++; else stale++;
-            if (!retries.due(section, ticks)) continue;
-            if (cover != null) { dirtySections.computeIfAbsent(key(x, z), unused -> new HashSet<>()).add(y); scheduler.rebuild(key(x, z)); }
-            else { client.levelExtractor.setSectionDirty(x, y, z); rebuilds++; }
+            if (cover != null) {
+                if (retries.due(section, ticks)) {
+                    dirtySections.computeIfAbsent(key(x, z), unused -> new HashSet<>()).add(y); scheduler.rebuild(key(x, z));
+                }
+            } else if (rebuildQueue.canRequest(section, true) && retries.due(section, ticks)) {
+                rebuildQueue.request(section, SectionRebuildQueue.GROUND, true);
+            }
         }
         retries.removeIf(section -> !sections.contains(section));
     }
@@ -293,7 +304,7 @@ public final class GroundSnowSystem {
             }
             candidates |= kinds[i] != 0;
         }
-        if (!candidates) return new Cover(heights, layers, kinds, false);
+        if (!candidates) return new Cover(++nextRevision, heights, layers, kinds, false);
 
         int width = 16 + 2 * RADIUS;
         int[] nearbyHeights = new int[width * width]; byte[] snow = new byte[width * width];
@@ -308,12 +319,17 @@ public final class GroundSnowSystem {
             int i = z * 16 + x; if (kinds[i] == 0) continue;
             layers[i] = (byte) GroundSnowMath.nearestLayers(nearbyHeights, snow, width, x + RADIUS, z + RADIUS, heights[i]);
         }
-        return new Cover(heights, layers, kinds, true);
+        return new Cover(++nextRevision, heights, layers, kinds, true);
     }
 
-    public boolean settled() { return (!enabled() || scheduler.pendingCaptures() == 0) && scheduler.pendingRebuilds() == 0 && rebuilding == null; }
+    void rebuilt() { rebuilds++; }
+    public boolean settled() {
+        return (!enabled() || scheduler.pendingCaptures() == 0) && scheduler.pendingRebuilds() == 0 && rebuilding == null
+                && rebuildQueue.pending(SectionRebuildQueue.GROUND) == 0;
+    }
     public String diagnostics() {
-        return "groundChunks=" + snapshots.size() + " groundPending=" + scheduler.pendingCaptures() + "/" + scheduler.pendingRebuilds()
+        return "groundChunks=" + snapshots.size() + " groundPending=" + scheduler.pendingCaptures() + "/"
+                + (scheduler.pendingRebuilds() + rebuildQueue.pending(SectionRebuildQueue.GROUND))
                 + " groundInFlight=" + (rebuilding == null ? 0 : 1)
                 + " groundCaptures=" + captures + " groundRebuilds=" + rebuilds + " groundStale=" + stale + " groundUnmeshed=" + unmeshed + " groundCaptureMs=" + captureNanos / 1e6;
     }

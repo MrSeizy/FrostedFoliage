@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Mesh acknowledgments store revision numbers, allowing evicted or replaced foliage and ground snapshots to be reclaimed before renderer cleanup completes.
+- Foliage and ground snow share a bounded rebuild queue. Duplicate pending requests are combined, cleanup retries obey the normal combined per-tick budget, and a full queue defers work without dropping it.
+- The flight fixture reports frame-time percentiles, retained snapshot payload and peak rebuild requests per tick; the torn-build fixture verifies that an evicted snapshot can be reclaimed while its stale mesh still needs cleanup.
+
 ## 0.2.1 — 2026-10-26
 
 Fixes from the adversarial audit (`ADVERSARIAL_AUDIT.md`):

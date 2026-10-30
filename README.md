@@ -126,3 +126,15 @@ On Windows, use `gradlew.bat` in place of `./gradlew`.
 3. Choose scenarios in `config/frostedfoliage-test.properties`, for example `ground=true`. The names match the `frostedfoliage.test.*` flags set in `build.gradle`. This file is easier to change than Java arguments, which some launchers cache.
 
 Never give the test mod to players.
+
+### Measuring cache and rebuild work
+
+Run the flight fixture with Sodium and a small cache to exercise eviction and cleanup:
+
+```sh
+./gradlew runClientGameTest -PtestRenderer=sodium -PflightTest=true -PcacheStressTest=true -PflightHalf=160
+```
+
+This flies a 320-block course through a fixed snowy-taiga seed after generating the terrain. Omit `flightHalf` for the full 1,280-block course, or omit `cacheStressTest` to use the default cache size. Results are written to `build/run/clientGameTest/flight-benchmark.json`: frame-time percentiles, maximum rebuild requests per tick, and snapshot-array bytes held by caches or only by mesh acknowledgments. These byte counts exclude object/map overhead and GPU memory. Compare the same renderer, course, cache size and hardware, and copy results out before the next client test clears the run directory.
+
+Foliage and ground snow share a limit of 2/4/8 section rebuild requests per tick at Low/Medium/High quality, including retries. `/frostedfoliage status` reports their combined `sectionRebuilds`, the dispatch `rebuildQueue`, and `peakRebuilds` since joining the world. Per-source `rebuilds` and `groundRebuilds` can count the same coalesced request.
