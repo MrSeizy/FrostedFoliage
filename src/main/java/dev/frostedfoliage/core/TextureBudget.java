@@ -5,6 +5,8 @@ import java.util.List;
 /** Keep source resolution and spatial patterns; reduce weather steps before dropping textures. */
 public final class TextureBudget {
     public static final long MAX_TEXELS = 8L * 1024 * 1024;
+    /** 16 MiB of base RGBA particle images, including every animation frame; excludes atlas/GPU overhead. */
+    public static final long MAX_PARTICLE_TEXELS = 4L * 1024 * 1024;
     /** Largest source image (all animation frames) turned into masks or frosted particle sprites. */
     public static final int MAX_SOURCE_PIXELS = 65536;
     private TextureBudget() { }

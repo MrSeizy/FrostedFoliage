@@ -61,7 +61,7 @@ if (testRenderer == 'iris') {
 }
 // Boolean -P flags for the client game tests, mapped to the frostedfoliage.test.* system properties they set.
 def gameTestFlags = [
-    benchmark: 'benchmark', churnTest: 'churn', verifyChurnFix: 'churn.verify', textureBudgetTest: 'textureBudget',
+    benchmark: 'benchmark', churnTest: 'churn', verifyChurnFix: 'churn.verify', textureBudgetTest: 'textureBudget', particleBudgetTest: 'particleBudget',
     reloadTest: 'reload', groundTest: 'ground', galleryCapture: 'gallery', captureTest: 'capture',
     legacyCapture: 'capture.legacy', priorityTest: 'priority', appearanceTest: 'appearance', depthTest: 'depth',
     videoCapture: 'video', timelapseCapture: 'timelapse', plantTest: 'plants', iconCapture: 'icon',

@@ -79,6 +79,8 @@ Frosted Foliage supports vanilla leaves, grass, ferns, flowers, bushes, azaleas,
 
 The mod works with Minecraft's standard renderer, Sodium, and Iris. With Sodium and the **Fast** leaves setting, snow appears only on fully covered faces without a depth taper (tops at any depth, all faces at 100% depth), with or without a shader pack; Fancy leaves show the full effect. Resource packs and shaders can change the final appearance; packs with custom foliage models or rendering may need additional compatibility work.
 
+Frosted falling-leaf images have a combined 16 MiB RGBA budget, including animation frames. Large packs keep their original particle sprites wherever a frosted copy does not fit. Selection stays consistent across reloads; atlas packing and other renderer allocations use additional memory.
+
 ## Common questions
 
 ### Why isn't snow appearing?
