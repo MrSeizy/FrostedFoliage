@@ -112,6 +112,18 @@ public final class SnowSystem {
         ground.load(chunk);
         int before = scheduler.size();
         if (!discover(chunk, true) || scheduler.size() < before) ring.restart();
+        // Fuzzy biome lookup can cross a chunk boundary. A neighbor captured before this chunk arrived
+        // may contain the client's plains fallback; biome packets can also change that dependency.
+        recaptureBiomeNeighbors(chunk.getPos().x(), chunk.getPos().z());
+    }
+
+    private void recaptureBiomeNeighbors(int x, int z) {
+        for (int dx = -1; dx <= 1; dx++) for (int dz = -1; dz <= 1; dz++) {
+            if (dx == 0 && dz == 0) continue;
+            for (int i = 0; i < world.getSectionsCount(); i++) {
+                scheduler.recapture(SectionPos.asLong(x + dx, world.getSectionYFromSectionIndex(i), z + dz));
+            }
+        }
     }
 
     private boolean discover(LevelChunk chunk, boolean invalidate) {

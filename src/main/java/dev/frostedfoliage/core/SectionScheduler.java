@@ -73,6 +73,8 @@ public final class SectionScheduler {
     }
 
     public void recaptureAll() { for (long key : retained.insertionOrder) captures.add(key); }
+    /** Invalidate a dependency of an existing snapshot without admitting new work or forcing a rebuild. */
+    public void recapture(long key) { if (retained.contains(key)) captures.add(key); }
     public void rebuildAll() { for (long key : retained.insertionOrder) if (snowy.contains(key)) rebuilds.add(key); }
 
     public void captured(long key, boolean hasSnow, boolean changed) {
