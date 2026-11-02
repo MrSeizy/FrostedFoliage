@@ -115,4 +115,17 @@ class SectionSchedulerTest {
         s.captured(10, false, true); assertEquals(10L, s.nextRebuild());
         s.discard(10, k -> {}); assertEquals(10L, s.nextRebuild());
     }
+    @Test void recapturingNeighborsCoalescesRetainedKeysWithoutAdmittingOrRebuildingOthers() {
+        var s = scheduler(4); add(s, 1, 2); add(s, 2, 2);
+        s.nextCapture(); s.nextCapture();
+        s.captured(1, true, true); s.nextRebuild();
+        s.recapture(1); s.recapture(1); s.recapture(0); s.recapture(99);
+        assertEquals(Set.of(1L, 2L), keys(s)); assertEquals(0, s.evictions());
+        assertEquals(1, s.pendingCaptures()); assertEquals(1L, s.nextCapture());
+        assertNull(s.nextCapture()); assertNull(s.nextRebuild());
+        s.captured(1, true, false); assertNull(s.nextRebuild());
+        s.discard(1, k -> {}); s.recapture(1);
+        assertEquals(Set.of(2L), keys(s)); assertNull(s.nextCapture());
+        assertEquals(1L, s.nextRebuild()); // A recapture must not resurrect an evicted key or lose its cleanup.
+    }
 }

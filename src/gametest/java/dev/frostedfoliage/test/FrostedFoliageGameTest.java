@@ -16,6 +16,7 @@ public final class FrostedFoliageGameTest implements FabricClientGameTest {
             new NaturalGalleryCapture().run(context); return;
         }
         if (Boolean.getBoolean("frostedfoliage.test.ground")) { new GroundSnowTest().run(context); return; }
+        if (Boolean.getBoolean("frostedfoliage.test.biomeBoundary")) { new BiomeBoundaryTest().run(context); return; }
         if (Boolean.getBoolean("frostedfoliage.test.reload")) { new FoliageReloadTest().run(context); return; }
         if (Boolean.getBoolean("frostedfoliage.test.textureBudget")) { new ResourceBudgetTest().run(context); return; }
         if (Boolean.getBoolean("frostedfoliage.test.particleBudget")) { new ParticleBudgetTest().run(context); return; }
@@ -163,6 +164,7 @@ public final class FrostedFoliageGameTest implements FabricClientGameTest {
         try (var second = context.worldBuilder().create()) {
             check(context.computeOnClient(c -> !FrostedFoliageClient.system().active()), "Second world inherited weather history");
         }
+        new BiomeBoundaryTest().run(context);
     }
     /**
      * Launchers such as Prism cache an instance's JVM arguments, so scenario flags can also come from
