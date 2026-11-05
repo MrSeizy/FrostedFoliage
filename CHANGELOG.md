@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Frost falling-leaf particles from mods such as Biomes O' Plenty that use custom particle classes and registered `*_leaves` types. Smoke and flower-petal particles retain their original sprites.
+- Add an opt-in real-mod compatibility fixture for Biomes O' Plenty and Oh The Trees You'll Grow, including foliage models, generated trees, particles, weather, settings and resource reloads; run it nightly with vanilla and Sodium.
 - Mesh acknowledgments store revision numbers, allowing evicted or replaced foliage and ground snapshots to be reclaimed before renderer cleanup completes.
 - Foliage and ground snow share a bounded rebuild queue. Duplicate pending requests are combined, cleanup retries obey the normal combined per-tick budget, and a full queue defers work without dropping it.
 - The flight fixture reports frame-time percentiles, retained snapshot payload and peak rebuild requests per tick; the torn-build fixture verifies that an evicted snapshot can be reclaimed while its stale mesh still needs cleanup.

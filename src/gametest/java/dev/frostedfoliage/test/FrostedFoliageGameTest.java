@@ -12,6 +12,7 @@ public final class FrostedFoliageGameTest implements FabricClientGameTest {
     private static final BlockPos TOP = new BlockPos(0, 70, 0);
     @Override public void runTest(ClientGameTestContext context) {
         loadLauncherFlags();
+        if (Boolean.getBoolean("frostedfoliage.test.biomeCompat")) { new BiomeCompatibilityTest().run(context); return; }
         if (Boolean.getBoolean("frostedfoliage.test.gallery") || Boolean.getBoolean("frostedfoliage.test.capture")) {
             new NaturalGalleryCapture().run(context); return;
         }

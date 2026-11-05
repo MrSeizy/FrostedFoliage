@@ -20,6 +20,6 @@ abstract class ParticleEngineMixin {
     @Inject(method = "createParticle", at = @At("RETURN"))
     private void frostedfoliage$frostLeaves(ParticleOptions options, double x, double y, double z, double xa, double ya, double za,
             CallbackInfoReturnable<Particle> cir) {
-        if (cir.getReturnValue() != null) SnowParticles.frost(cir.getReturnValue(), x, y, z, random);
+        if (cir.getReturnValue() != null) SnowParticles.frost(cir.getReturnValue(), options, x, y, z, random);
     }
 }

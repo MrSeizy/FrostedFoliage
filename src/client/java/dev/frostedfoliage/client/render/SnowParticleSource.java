@@ -29,12 +29,16 @@ public final class SnowParticleSource implements SpriteSource {
         return Identifier.fromNamespaceAndPath("frostedfoliage", "frosted/" + original.getNamespace() + "/" + original.getPath());
     }
 
+    public static boolean isLeafParticle(Identifier type) {
+        return type != null && type.getPath().endsWith("leaves");
+    }
+
     @Override public void run(ResourceManager manager, Output output) {
         // Reserve in identifier order before loaders run in parallel, so reloads keep the same sprites.
         Set<Identifier> textures = new TreeSet<>();
-        // Vanilla names every falling leaf particle *_leaves; any other particle keeps its own sprite.
+        // Vanilla and mods such as BOP name their falling leaf particle types *_leaves.
         PARTICLES.listMatchingResources(manager).forEach((file, resource) -> {
-            if (!PARTICLES.fileToId(file).getPath().endsWith("leaves")) return;
+            if (!isLeafParticle(PARTICLES.fileToId(file))) return;
             try (var reader = resource.openAsReader()) {
                 textures.addAll(ParticleDescription.fromJson(GsonHelper.parse(reader)).getTextures());
             } catch (Exception e) {

@@ -8,9 +8,12 @@ import java.util.concurrent.ConcurrentHashMap;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.particle.FallingLeavesParticle;
 import net.minecraft.client.particle.Particle;
+import net.minecraft.client.particle.SingleQuadParticle;
 import net.minecraft.client.renderer.texture.MissingTextureAtlasSprite;
 import net.minecraft.client.renderer.texture.TextureAtlasSprite;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.particles.ParticleOptions;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.data.AtlasIds;
 import net.minecraft.resources.Identifier;
 import net.minecraft.util.RandomSource;
@@ -20,9 +23,13 @@ public final class SnowParticles {
     private static final Set<Identifier> missing = ConcurrentHashMap.newKeySet();
     private SnowParticles() { }
 
-    public static void frost(Particle particle, double x, double y, double z, RandomSource random) {
+    public static void frost(Particle particle, ParticleOptions options, double x, double y, double z, RandomSource random) {
         var system = FrostedFoliageClient.system();
-        if (!(particle instanceof FallingLeavesParticle leaf) || system == null) return;
+        if (!(particle instanceof SingleQuadParticle leaf) || system == null) return;
+        // BOP and other mods provide their own particle classes. Use the same registered-type convention as
+        // atlas discovery, while keeping unrelated sprite particles (smoke, drips, flower petals) unchanged.
+        if (!(particle instanceof FallingLeavesParticle)
+                && !SnowParticleSource.isLeafParticle(BuiltInRegistries.PARTICLE_TYPE.getKey(options.getType()))) return;
         // Leaf blocks drop these 0.05 below themselves (ParticleUtils.spawnParticleBelow).
         double coverage = system.coverage(BlockPos.containing(x, y + 0.1, z));
         if (random.nextDouble() >= SnowMath.frostedLeafChance(coverage, system.config().snowDepth())) return;

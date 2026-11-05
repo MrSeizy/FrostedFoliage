@@ -46,6 +46,16 @@ fabricApi {
 // The gametest configurations only exist once configureTests above has created the source set.
 dependencies { gametestCompileOnly "maven.modrinth:iris:${iris_version}" }
 
+// Real biome mods are opt-in test inputs only; none are packaged or required by the release.
+if (providers.gradleProperty('biomeCompatTest').getOrElse('false').toBoolean()) {
+    dependencies {
+        gametestRuntimeOnly "maven.modrinth:biomes-o-plenty:${bop_test_version}"
+        gametestRuntimeOnly "maven.modrinth:glitchcore:${glitchcore_test_version}"
+        gametestRuntimeOnly "maven.modrinth:terrablender:${terrablender_test_version}"
+        gametestRuntimeOnly "maven.modrinth:oh-the-trees-youll-grow:${ottg_test_version}"
+    }
+}
+
 def testRenderer = providers.gradleProperty('testRenderer').getOrElse('vanilla')
 if (!(testRenderer in ['vanilla', 'sodium', 'iris'])) {
     throw new GradleException('testRenderer must be vanilla, sodium, or iris')
@@ -66,6 +76,7 @@ def gameTestFlags = [
     legacyCapture: 'capture.legacy', priorityTest: 'priority', appearanceTest: 'appearance', depthTest: 'depth',
     videoCapture: 'video', timelapseCapture: 'timelapse', plantTest: 'plants', iconCapture: 'icon',
     vanillaPlants: 'vanillaPlants', treeTypesTest: 'treeTypes', leavesTest: 'leaves', rebuildTest: 'rebuild', tornTest: 'torn', flightTest: 'flight', cacheStressTest: 'cacheStress',
+    biomeCompatTest: 'biomeCompat',
 ]
 loom.runs.named('clientGameTest') {
     systemProperties.put('frostedfoliage.test.renderer', testRenderer)
