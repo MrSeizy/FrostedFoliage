@@ -36,10 +36,7 @@ public final class BiomeBoundaryTest {
             // then capture EDGE while NORTH is absent: ClientLevel supplies its warm plains fallback.
             var packet = server.computeOnServer(s -> new ClientboundLevelChunkWithLightPacket(
                     s.overworld().getChunk(NORTH.x(), NORTH.z()), s.overworld().getLightEngine(), null, null));
-            context.runOnClient(c -> {
-                c.level.getChunkSource().drop(NORTH);
-                FrostedFoliageClient.system().load(c.level, c.level.getChunk(0, 0));
-            });
+            context.runOnClient(c -> c.level.getChunkSource().drop(NORTH));
             await(context, c -> !c.level.getChunkSource().hasChunk(NORTH.x(), NORTH.z())
                     && c.level.getBiome(EDGE).is(Biomes.PLAINS) && coverage(EDGE) == 0 && coverage(INTERIOR) > .99,
                     "Missing neighbor did not establish the warm boundary snapshot");
@@ -66,7 +63,7 @@ public final class BiomeBoundaryTest {
             context.runOnClient(c -> {
                 if (count(" rebuilds=") != before) throw new AssertionError("Unchanged neighbor recaptures requested a foliage rebuild: " + status(c));
                 if (coverage(EDGE) < .99) throw new AssertionError("Unchanged neighbor recapture lost boundary snow: " + status(c));
-                FrostedFoliageClient.LOGGER.info("BIOME BOUNDARY PASS chunk arrival, warm/cold biome packets, unchanged neighbor recapture: {}", status(c));
+                FrostedFoliageClient.LOGGER.info("BIOME BOUNDARY PASS chunk unload and arrival, warm/cold biome packets, unchanged neighbor recapture: {}", status(c));
             });
         }
     }

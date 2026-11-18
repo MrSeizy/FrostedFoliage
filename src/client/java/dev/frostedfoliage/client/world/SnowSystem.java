@@ -152,6 +152,7 @@ public final class SnowSystem {
             rebuildQueue.remove(key);
             if (rebuilding != null && rebuilding == key) rebuilding = null;
         }
+        recaptureBiomeNeighbors(chunk.getPos().x(), chunk.getPos().z());
         ring.restart();
     }
 
