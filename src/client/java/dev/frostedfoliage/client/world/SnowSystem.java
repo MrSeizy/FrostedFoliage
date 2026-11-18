@@ -43,7 +43,7 @@ public final class SnowSystem {
     private long nextSnapshotRevision, nextProgressRevision, sectionRebuilds;
     private int peakRebuilds;
     private Long rebuilding;
-    private int focusX, focusY, focusZ;
+    private int focusX, focusZ;
     private boolean focused, preview, progressStale;
     private static final int RETRY_TICKS = 20;
     private final RetryBackoff retries = new RetryBackoff(RETRY_TICKS, 5);
@@ -181,15 +181,15 @@ public final class SnowSystem {
         if (world == null || client.level != world || client.player == null) return;
         BlockPos pos = client.player.blockPosition();
         int x = pos.getX() >> 4, y = pos.getY() >> 4, z = pos.getZ() >> 4;
-        if (!focused || x != focusX || y != focusY || z != focusZ) {
-            focusX = x; focusY = y; focusZ = z; focused = true;
+        // Discovery and admission must measure distance from the same focus throughout a pass.
+        if (reprioritize.due(x, y, z, ticks)) {
+            focusX = x; focusZ = z; focused = true;
+            scheduler.prioritize(key -> {
+                long dx = (long) SectionPos.x(key) - x, dy = (long) SectionPos.y(key) - y, dz = (long) SectionPos.z(key) - z;
+                return dx * dx + dy * dy + dz * dz;
+            });
             ring.restart();
         }
-        // Captured coordinates keep the ordered sets' comparator stable between reprioritizations.
-        if (reprioritize.due(x, y, z, ticks)) scheduler.prioritize(key -> {
-            long dx = (long) SectionPos.x(key) - x, dy = (long) SectionPos.y(key) - y, dz = (long) SectionPos.z(key) - z;
-            return dx * dx + dy * dy + dz * dz;
-        });
         ring.resize(client.options.getEffectiveRenderDistance());
     }
 

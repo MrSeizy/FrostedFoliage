@@ -18,6 +18,16 @@ public final class GroundDiscoveryTest {
                 .maxVisualUpdatesPerSecond(1).maxCachedSections(64).build();
         var foliage = new Foliage(); foliage.refresh(config, true);
         try {
+            // TARGET is three chunks east initially, then two after a one-chunk move.
+            var shortMove = new GroundSnowSystem(config, foliage, new SectionRebuildQueue(64));
+            shortMove.reset(client.level);
+            client.player.setPos(-24, 70, 24);
+            for (int tick = 0; tick < 20; tick++) shortMove.tick(client);
+            check(shortMove.layers(TARGET) == 0, "Target should start outside the full cache");
+            client.player.setPos(-8, 70, 24);
+            for (int tick = 0; tick < 60; tick++) shortMove.tick(client);
+            check(shortMove.layers(TARGET) == 1, "Delayed reprioritization missed the newly nearby target");
+
             for (boolean unloading : new boolean[]{false, true}) {
                 var queue = new SectionRebuildQueue(64);
                 var ground = new GroundSnowSystem(config, foliage, queue);

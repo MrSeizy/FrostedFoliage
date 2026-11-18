@@ -49,7 +49,7 @@ public final class GroundSnowSystem {
     // Block updates arrive on the client thread only, so one scratch position serves them all.
     private final BlockPos.MutableBlockPos scratch = new BlockPos.MutableBlockPos();
     private int focusX, focusZ;
-    private boolean focused, rescan;
+    private boolean rescan;
     private Long rebuilding;
     private long captures, captureNanos, rebuilds;
     // Survives reset so late workers cannot acknowledge a new world with a reused version.
@@ -110,7 +110,7 @@ public final class GroundSnowSystem {
 
     void reset(ClientLevel level) {
         world = level; scheduler.clear(); snapshots.clear(); dirtySections.clear(); meshed.clear(); retries.clear();
-        reprioritize.reset(); ring.restart(); focused = rescan = false; captures = captureNanos = rebuilds = 0; ticks = stale = unmeshed = 0;
+        reprioritize.reset(); ring.restart(); rescan = false; captures = captureNanos = rebuilds = 0; ticks = stale = unmeshed = 0;
         rebuilding = null;
     }
 
@@ -183,10 +183,8 @@ public final class GroundSnowSystem {
     private void updateFocus(Minecraft client) {
         if (world == null || client.player == null) return;
         int x = client.player.blockPosition().getX() >> 4, z = client.player.blockPosition().getZ() >> 4;
-        if (!focused || x != focusX || z != focusZ) {
-            focusX = x; focusZ = z; focused = true; ring.restart(); rescan = false;
-        }
         if (reprioritize.due(x, 0, z, ticks)) {
+            focusX = x; focusZ = z; ring.restart(); rescan = false;
             scheduler.prioritize(k -> { long dx = SectionPos.x(k) - x, dz = SectionPos.z(k) - z; return dx*dx + dz*dz; });
         }
     }
