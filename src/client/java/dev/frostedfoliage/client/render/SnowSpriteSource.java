@@ -6,6 +6,7 @@ import dev.frostedfoliage.client.FrostedFoliageClient;
 import dev.frostedfoliage.core.PlantSnow;
 import dev.frostedfoliage.core.SnowMath;
 import dev.frostedfoliage.core.TextureBudget;
+import dev.frostedfoliage.core.SnowTexture;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -68,22 +69,21 @@ public final class SnowSpriteSource implements SpriteSource {
         var bounds = new HashMap<Identifier, FoliageTextures.Bounds>();
         for (var entry : candidates) {
             Identifier original = TEXTURE_ID_CONVERTER.fileToId(entry.getKey());
-            Resource resource = entry.getValue();
             boolean leaf = leaves.contains(original);
             var uses = plantUses.getOrDefault(original, Set.of());
-            long pixels;
-            try (var stream = resource.open(); NativeImage probe = NativeImage.read(stream)) {
-                pixels = (long) probe.getWidth() * probe.getHeight();
-                if (pixels > TextureBudget.MAX_SOURCE_PIXELS) {
-                    FrostedFoliageClient.LOGGER.warn("Skipping snow texture {} larger than {} source pixels", original, TextureBudget.MAX_SOURCE_PIXELS);
-                    continue;
+            SnowTexture texture;
+            try {
+                texture = SnowTexture.inspect(entry.getValue());
+                if (!uses.isEmpty()) {
+                    try (var stream = texture.resource().open(); var image = NativeImage.read(stream)) {
+                        bounds.put(original, visibleBounds(image, texture.resource()));
+                    }
                 }
-                if (!uses.isEmpty()) bounds.put(original, visibleBounds(probe, resource));
             } catch (Exception e) {
                 FrostedFoliageClient.LOGGER.warn("Cannot read foliage texture {}: {}", original, e.toString());
                 continue;
             }
-            accepted.add(new Source(original, entry.getKey(), resource, leaf, pixels));
+            accepted.add(new Source(original, entry.getKey(), texture.resource(), leaf, texture.pixels()));
         }
         var plantSpans = FoliageTextures.spans(plantUses, bounds);
         var costs = accepted.stream().map(source -> new TextureBudget.Source(source.pixels(), source.leaf(),

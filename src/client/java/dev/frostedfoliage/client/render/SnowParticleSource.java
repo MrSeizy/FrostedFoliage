@@ -5,6 +5,7 @@ import com.mojang.serialization.MapCodec;
 import dev.frostedfoliage.client.FrostedFoliageClient;
 import dev.frostedfoliage.core.SnowMath;
 import dev.frostedfoliage.core.TextureBudget;
+import dev.frostedfoliage.core.SnowTexture;
 import java.util.List;
 import java.util.Set;
 import java.util.TreeSet;
@@ -51,39 +52,30 @@ public final class SnowParticleSource implements SpriteSource {
             var resource = manager.getResource(TEXTURE_ID_CONVERTER.idToFile(texture.withPrefix("particle/")));
             if (resource.isEmpty()) continue;
             Identifier id = frostedId(texture);
-            long pixels;
-            // Probes are closed immediately; only admitted images reach the parallel decoding phase.
-            try (var stream = resource.get().open(); NativeImage probe = NativeImage.read(stream)) {
-                pixels = (long) probe.getWidth() * probe.getHeight();
-                if (pixels > TextureBudget.MAX_SOURCE_PIXELS) {
-                    FrostedFoliageClient.LOGGER.warn("Skipping frosted particle sprite {}: larger than {} source pixels", id, TextureBudget.MAX_SOURCE_PIXELS);
-                    continue;
-                }
+            SnowTexture source;
+            try {
+                source = SnowTexture.inspect(resource.get());
             } catch (Exception e) {
                 FrostedFoliageClient.LOGGER.warn("Cannot read leaf particle texture {}: {}", texture, e.toString());
                 continue;
             }
-            if (pixels > remaining) {
+            if (source.pixels() > remaining) {
                 skipped++;
                 continue;
             }
-            remaining -= pixels;
-            output.add(id, loader -> frost(id, resource.get(), pixels));
+            remaining -= source.pixels();
+            output.add(id, loader -> frost(id, source.resource()));
             added++;
         }
         if (skipped > 0) FrostedFoliageClient.LOGGER.warn("Skipped {} frosted particle sprites to fit the 16 MiB image budget; original particles retained", skipped);
         FrostedFoliageClient.LOGGER.info("Snow textures: {} falling leaf particle sprites, {} texels", added, TextureBudget.MAX_PARTICLE_TEXELS - remaining);
     }
 
-    private static SpriteContents frost(Identifier id, Resource resource, long reservedPixels) {
+    private static SpriteContents frost(Identifier id, Resource resource) {
         NativeImage image = null;
         try (var stream = resource.open()) {
             image = NativeImage.read(stream);
             int width = image.getWidth(), height = image.getHeight();
-            if ((long) width * height != reservedPixels) {
-                FrostedFoliageClient.LOGGER.warn("Skipping frosted particle sprite {}: image size changed after budget reservation", id);
-                return null;
-            }
             var animation = resource.metadata().getSection(AnimationMetadataSection.TYPE);
             var texture = resource.metadata().getSection(TextureMetadataSection.TYPE);
             FrameSize frame = animation.map(a -> a.calculateFrameSize(width, height)).orElse(new FrameSize(width, height));
